@@ -1,0 +1,281 @@
+// ============================================================
+// Esquema de base de datos - Marketplace de Cotizaciones
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ------------------------------------------------------------
+// Usuarios y empresas
+// ------------------------------------------------------------
+
+enum RolUsuario {
+  COMPRADOR
+  PROVEEDOR
+  ADMIN
+}
+
+// Nivel de permiso dentro de la propia empresa (no confundir con RolUsuario,
+// que distingue comprador/proveedor). ADMIN_EMPRESA puede crear proyectos,
+// publicar productos y aprobar/descartar cotizaciones; MIEMBRO solo puede
+// ver y proponer (enviar solicitudes, responder precios) pero no aprobar.
+enum RolEmpresa {
+  ADMIN_EMPRESA
+  MIEMBRO
+}
+
+model Usuario {
+  id           String     @id @default(cuid())
+  nombre       String
+  email        String     @unique
+  passwordHash String
+  rol          RolUsuario
+  rolEmpresa   RolEmpresa @default(ADMIN_EMPRESA)
+  empresaId    String?
+  empresa      Empresa?   @relation(fields: [empresaId], references: [id])
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  proyectosCreados     Proyecto[]          @relation("ProyectosCreadosPor")
+  cotizacionesEnviadas Cotizacion[]        @relation("CotizacionesEnviadasPor")
+  archivosSubidos      ArchivoCotizacion[] @relation("ArchivosSubidosPor")
+  sondeosCapturados    CotizacionMercado[] @relation("SondeosCapturadosPor")
+}
+
+enum TipoEmpresa {
+  COMPRADOR
+  PROVEEDOR
+  AMBOS
+}
+
+model Empresa {
+  id        String      @id @default(cuid())
+  nombre    String
+  nit       String?     @unique
+  tipo      TipoEmpresa
+  pais      String?
+  sitioWeb  String?
+  telefono  String?
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  usuarios     Usuario[]
+  productos    Producto[]   @relation("ProductosDeProveedor")
+  proyectos    Proyecto[]   @relation("ProyectosDeEmpresa")
+  cotizaciones Cotizacion[] @relation("CotizacionesDeProveedor")
+}
+
+// ------------------------------------------------------------
+// Catálogo de productos (compartido entre proyectos)
+// ------------------------------------------------------------
+
+model CategoriaProducto {
+  id        String     @id @default(cuid())
+  nombre    String     @unique
+  productos Producto[]
+}
+
+model Producto {
+  id          String             @id @default(cuid())
+  nombre      String
+  descripcion String?
+  marca       String?
+  modelo      String?
+  unidad      String             @default("unidad") // unidad, kWp, m2, ton, etc.
+  precioRef   Float? // último precio de referencia conocido
+  moneda      String             @default("USD")
+  categoriaId String?
+  categoria   CategoriaProducto? @relation(fields: [categoriaId], references: [id])
+  proveedorId String
+  proveedor   Empresa            @relation("ProductosDeProveedor", fields: [proveedorId], references: [id])
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  // Sondeo diario de mercado (búsqueda de proveedores en Alibaba, etc.)
+  seguimientoActivo Boolean @default(true) // entra en la revisión diaria
+  minCotizaciones   Int     @default(5) // objetivo mínimo de cotizaciones por revisión
+
+  itemsCotizacion     ItemCotizacion[]
+  itemsProyecto       ItemProyecto[]
+  cotizacionesMercado CotizacionMercado[]
+}
+
+// ------------------------------------------------------------
+// Proyectos
+// ------------------------------------------------------------
+
+enum EstadoProyecto {
+  PREFACTIBILIDAD
+  DISENO
+  COTIZACION
+  APROBADO
+  EN_EJECUCION
+  FINALIZADO
+  CANCELADO
+}
+
+model Proyecto {
+  id          String         @id @default(cuid())
+  nombre      String
+  descripcion String?
+  estado      EstadoProyecto @default(PREFACTIBILIDAD)
+  empresaId   String
+  empresa     Empresa        @relation("ProyectosDeEmpresa", fields: [empresaId], references: [id])
+  creadoPorId String
+  creadoPor   Usuario        @relation("ProyectosCreadosPor", fields: [creadoPorId], references: [id])
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  items               ItemProyecto[]
+  cotizaciones        Cotizacion[]
+  cotizacionesMercado CotizacionMercado[]
+}
+
+// Lista de materiales (BOM) del proyecto: qué productos necesita y en qué cantidad
+model ItemProyecto {
+  id          String    @id @default(cuid())
+  proyectoId  String
+  proyecto    Proyecto  @relation(fields: [proyectoId], references: [id], onDelete: Cascade)
+  productoId  String?
+  producto    Producto? @relation(fields: [productoId], references: [id])
+  nombreLibre String? // por si el producto aún no existe en catálogo
+  cantidad    Float
+  unidad      String    @default("unidad")
+  notas       String?
+}
+
+// ------------------------------------------------------------
+// Cotizaciones (RFQ - Request for Quotation)
+// ------------------------------------------------------------
+
+enum EstadoCotizacion {
+  BORRADOR
+  ENVIADA
+  EN_NEGOCIACION
+  RECIBIDA
+  APROBADA
+  DESCARTADA
+}
+
+model Cotizacion {
+  id           String           @id @default(cuid())
+  proyectoId   String
+  proyecto     Proyecto         @relation(fields: [proyectoId], references: [id], onDelete: Cascade)
+  proveedorId  String
+  proveedor    Empresa          @relation("CotizacionesDeProveedor", fields: [proveedorId], references: [id])
+  enviadaPorId String
+  enviadaPor   Usuario          @relation("CotizacionesEnviadasPor", fields: [enviadaPorId], references: [id])
+  estado       EstadoCotizacion @default(BORRADOR)
+  moneda       String           @default("USD")
+  validaHasta  DateTime?
+  notas        String?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  items    ItemCotizacion[]
+  archivos ArchivoCotizacion[]
+}
+
+model ItemCotizacion {
+  id           String     @id @default(cuid())
+  cotizacionId String
+  cotizacion   Cotizacion @relation(fields: [cotizacionId], references: [id], onDelete: Cascade)
+  productoId   String?
+  producto     Producto?  @relation(fields: [productoId], references: [id])
+  descripcion  String // descripción libre si no hay producto de catálogo
+  cantidad     Float
+  precioUnit   Float?
+  subtotal     Float?
+}
+
+// ------------------------------------------------------------
+// Archivos adjuntos (fichas técnicas, PDFs de cotización, etc.)
+// ------------------------------------------------------------
+
+model ArchivoCotizacion {
+  id           String     @id @default(cuid())
+  cotizacionId String
+  cotizacion   Cotizacion @relation(fields: [cotizacionId], references: [id], onDelete: Cascade)
+  nombre       String
+  url          String
+  tipo         String? // MIME type
+  tamanoBytes  Int?
+  subidoPorId  String
+  subidoPor    Usuario    @relation("ArchivosSubidosPor", fields: [subidoPorId], references: [id])
+  createdAt    DateTime   @default(now())
+}
+
+// ------------------------------------------------------------
+// Sondeo diario de mercado
+// Búsqueda periódica de proveedores/precios (Alibaba, etc.) para cada
+// producto en seguimiento. Es un flujo aparte de Cotizacion (RFQ formal
+// entre empresas registradas): aquí los proveedores son leads externos.
+// ------------------------------------------------------------
+
+enum FuenteCotizacion {
+  ALIBABA
+  MANUAL
+  OTRO
+}
+
+enum EstadoRevision {
+  EN_PROGRESO
+  COMPLETADA
+  PARCIAL // se completó pero faltaron productos (p. ej. captcha en Alibaba)
+  FALLIDA
+}
+
+// Una corrida del proceso de revisión diaria.
+model RevisionDiaria {
+  id                 String         @id @default(cuid())
+  fecha              DateTime       @default(now())
+  estado             EstadoRevision @default(EN_PROGRESO)
+  minPorProducto     Int            @default(5) // objetivo de cotizaciones por producto
+  productosObjetivo  Int            @default(0) // cuántos productos había que revisar
+  productosRevisados Int            @default(0)
+  cotizacionesNuevas Int            @default(0)
+  resumen            String? // resumen en markdown de la corrida
+  detalle            Json? // resultado estructurado por producto
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  cotizaciones CotizacionMercado[]
+}
+
+// Un precio/proveedor hallado para un producto en una fecha dada.
+model CotizacionMercado {
+  id         String          @id @default(cuid())
+  productoId String
+  producto   Producto        @relation(fields: [productoId], references: [id], onDelete: Cascade)
+  proyectoId String?
+  proyecto   Proyecto?       @relation(fields: [proyectoId], references: [id], onDelete: SetNull)
+  revisionId String?
+  revision   RevisionDiaria? @relation(fields: [revisionId], references: [id], onDelete: SetNull)
+
+  fuente            FuenteCotizacion @default(ALIBABA)
+  proveedorNombre   String
+  proveedorPais     String?
+  proveedorUrl      String? // enlace a la ficha del proveedor/producto
+  precioUnit        Float?
+  moneda            String           @default("USD")
+  unidad            String           @default("unidad")
+  moq               Float? // cantidad mínima de pedido
+  incoterm          String? // FOB, CIF, EXW, ...
+  tiempoEntregaDias Int?
+  notas             String?
+
+  fechaRevision  DateTime @default(now())
+  capturadoPorId String? // null si lo capturó la tarea programada
+  capturadoPor   Usuario? @relation("SondeosCapturadosPor", fields: [capturadoPorId], references: [id], onDelete: SetNull)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([productoId, fechaRevision])
+  @@index([revisionId])
+}

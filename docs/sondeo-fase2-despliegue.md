@@ -1,65 +1,116 @@
-# Fase 2 — Desplegar y programar el sondeo diario
+# Fase 2 — Desplegar en Vercel y programar el sondeo diario
 
 La tarea programada de Claude ("routine") corre **en la nube de Claude**, no en
 tu equipo. Para que pueda llamar a `/api/sondeo/*`, la app debe estar desplegada
 con **URL pública** y con `CRON_SECRET` configurado.
 
-## 1. Desplegar en Vercel
+El repositorio git ya está inicializado en `marketplace-app/` con un primer commit.
 
-Sigue el `README.md` (sección "Despliegue en producción — Vercel"). Además de las
-variables que ya lista, agrega en **Settings → Environment Variables**:
+---
+
+## Opción A — Vercel CLI (sin GitHub, más rápido)
+
+Desde `marketplace-app/`:
+
+```bash
+# 1. Autenticarte (abre el navegador con tu cuenta de Vercel)
+npx vercel login
+
+# 2. Primer deploy (crea el proyecto). Responde:
+#    - Set up and deploy? Y
+#    - Which scope? tu cuenta
+#    - Link to existing project? N
+#    - Project name? marketplace-cotizaciones
+#    - In which directory is your code located? ./
+#    - Override build command? Y ->  prisma generate && prisma migrate deploy && next build
+#    - Override output/dev? N
+npx vercel
+
+# 3. Anota la URL que te da (ej. https://marketplace-cotizaciones.vercel.app)
+#    y carga las variables de entorno (production):
+npx vercel env add DATABASE_URL production
+npx vercel env add NEXTAUTH_SECRET production
+npx vercel env add NEXTAUTH_URL production
+npx vercel env add CRON_SECRET production
+npx vercel env add APP_URL production
+
+# 4. Deploy final a producción con las variables ya cargadas
+npx vercel --prod
+```
+
+### Valores para las variables (production)
 
 | Variable | Valor |
 |---|---|
-| `CRON_SECRET` | Genera uno nuevo: `openssl rand -hex 32`. **No reutilices** el de desarrollo. |
-| `APP_URL` | Tu dominio de producción, ej. `https://tu-app.vercel.app` |
+| `DATABASE_URL` | El connection string de Neon **ya rotado** (Settings → Reset password en Neon). |
+| `NEXTAUTH_SECRET` | `3jzyCi8iHNSKipd4JoUr4j4+8nit+5UziP6n+ATxXss=` (generado para prod; o el tuyo con `openssl rand -base64 32`). |
+| `NEXTAUTH_URL` | La URL pública exacta, ej. `https://marketplace-cotizaciones.vercel.app` |
+| `CRON_SECRET` | `929b6db775e7ca24fe0f83fd64edb86c8285b7a01a36602a3b33a02c53b4e113` (nuevo, **distinto** al de desarrollo). |
+| `APP_URL` | La misma URL pública que `NEXTAUTH_URL`. |
 
-La migración `20260910234333_sondeo_diario` se aplica sola en el deploy si tu
-Build Command es `prisma generate && prisma migrate deploy && next build`.
+> Estos secretos se generaron en esta sesión. Si prefieres, reemplázalos por
+> otros — solo asegúrate de usar el mismo `CRON_SECRET` aquí y en la routine.
+
+---
+
+## Opción B — GitHub + dashboard de Vercel
+
+1. Crea un repo vacío en GitHub y súbelo:
+   ```bash
+   git remote add origin https://github.com/<tu-usuario>/marketplace-cotizaciones.git
+   git push -u origin master
+   ```
+2. [vercel.com](https://vercel.com) → **Add New → Project** → importa el repo.
+3. **Root Directory:** `./` (el repo ya es `marketplace-app`).
+4. **Build Command** (override):
+   `prisma generate && prisma migrate deploy && next build`
+5. **Environment Variables:** las 5 de la tabla de arriba.
+6. **Deploy.** Los siguientes `git push` a `master` redesplegarán solos.
+
+---
 
 ## 2. Probar la API en producción
 
 ```bash
-curl -s -H "Authorization: Bearer <CRON_SECRET_DE_PROD>" \
-  "https://tu-app.vercel.app/api/sondeo/worklist?dias=1"
+curl -s -H "Authorization: Bearer 929b6db775e7ca24fe0f83fd64edb86c8285b7a01a36602a3b33a02c53b4e113" \
+  "https://TU-URL.vercel.app/api/sondeo/worklist?dias=1"
 ```
 
-Debe responder un JSON con `items`. Si da 401, revisa el `CRON_SECRET`.
+Debe responder un JSON con `items`. Si da 401, revisa `CRON_SECRET`.
+La migración `20260910234333_sondeo_diario` se aplica sola en el build.
+
+---
 
 ## 3. Crear la tarea programada
 
-En una sesión de Claude Code sobre este proyecto:
+En una sesión de Claude Code sobre este proyecto, di:
+**"crea la routine del sondeo diario"** — o ejecuta `/schedule` — con:
 
-```
-/schedule
-```
-
-Configuración sugerida:
-
-- **Frecuencia:** diaria, de lunes a viernes, ~08:00 (hora de Colombia, `America/Bogota`).
-- **Prompt:** el contenido de la sección "Procedimiento" de `docs/sondeo-runbook.md`,
-  anteponiendo estas dos líneas con los valores reales:
+- **Frecuencia:** `0 8 * * 1-5` en `America/Bogota` (Lun–Vie 08:00).
+- **Prompt:** el contenido de la sección "Procedimiento" de
+  `docs/sondeo-runbook.md`, anteponiendo:
 
   ```
-  APP_URL = https://tu-app.vercel.app
-  El CRON_SECRET está en la variable de entorno CRON_SECRET de la routine.
+  APP_URL = https://TU-URL.vercel.app
+  CRON_SECRET = 929b6db775e7ca24fe0f83fd64edb86c8285b7a01a36602a3b33a02c53b4e113
+  Usa el header  Authorization: Bearer <CRON_SECRET>  en todas las llamadas.
   ```
 
-- **Secret de la routine:** guarda `CRON_SECRET` como variable/secret de la
-  propia tarea programada para que no quede en texto plano en el prompt.
+---
 
 ## 4. Verificar
 
-- Tras la primera corrida, revisa `/sondeo` en la app: debe aparecer una entrada
-  en "Revisiones recientes" y las cotizaciones nuevas por producto.
-- Si el estado queda `PARCIAL` de forma recurrente por captcha de Alibaba,
-  considera:
-  - Bajar el volumen (menos productos en seguimiento por día).
-  - Completar esos productos a mano desde `/sondeo/nueva-cotizacion`.
-  - Evaluar la opción de un servicio externo de datos (ver la conversación inicial).
+- Tras la primera corrida, revisa `/sondeo`: debe aparecer una entrada en
+  "Revisiones recientes" y cotizaciones nuevas por producto.
+- Si el estado queda `PARCIAL` seguido por captcha de Alibaba:
+  - Baja el volumen (menos productos en seguimiento por día).
+  - Completa esos productos a mano en `/sondeo/nueva-cotizacion`.
+  - Evalúa un servicio externo de datos de Alibaba.
+
+---
 
 ## Mientras tanto (sin desplegar)
 
-Puedes ejecutar la revisión **hoy**, manualmente, en una sesión de Claude Code:
-pídele que siga `docs/sondeo-runbook.md` con `APP_URL=http://localhost:3000` y el
-`CRON_SECRET` de tu `.env`. Necesitas la app corriendo (`npm run dev`).
+Ejecuta la revisión **hoy**, manualmente, en una sesión de Claude Code: pide
+seguir `docs/sondeo-runbook.md` con `APP_URL=http://localhost:3000` y el
+`CRON_SECRET` de tu `.env`, con la app corriendo (`npm run dev`).

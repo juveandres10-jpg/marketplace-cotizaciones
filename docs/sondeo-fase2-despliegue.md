@@ -1,3 +1,13 @@
+> **Actualización (2026-09-10): la rutina en la nube NO funciona.** El entorno
+> cloud de las tareas programadas de Claude (`/schedule`) bloquea TODO tráfico de
+> red saliente por política de la organización — ni siquiera puede llegar a
+> `vercel.app` o `example.com` con `curl`, y tampoco vía `WebFetch`. Se probó en
+> vivo (ver sesión `cse_01SXz3d6zdNTrbLCcwHhihjX`) y la rutina quedó
+> **deshabilitada** (`trig_01BhgUzLFWi1KijKrvLeZr4R`). La alternativa que sí
+> funciona es correr el runbook en una **sesión local de Claude Code** (manual
+> o vía un programador de tareas de Windows) — ver la sección "Alternativa que
+> sí funciona" al final de este documento.
+
 # Fase 2 — Desplegar en Vercel y programar el sondeo diario
 
 La tarea programada de Claude ("routine") corre **en la nube de Claude**, no en
@@ -114,3 +124,31 @@ En una sesión de Claude Code sobre este proyecto, di:
 Ejecuta la revisión **hoy**, manualmente, en una sesión de Claude Code: pide
 seguir `docs/sondeo-runbook.md` con `APP_URL=http://localhost:3000` y el
 `CRON_SECRET` de tu `.env`, con la app corriendo (`npm run dev`).
+
+---
+
+## Alternativa que sí funciona (la rutina en la nube está bloqueada)
+
+Como la tarea programada en la nube no tiene salida a internet, hay dos
+caminos reales para el sondeo diario, de más a menos automático:
+
+### A. Pedirlo cada mañana en una sesión de Claude Code (recomendado, ya funciona)
+
+Abre Claude Code (esta misma app) y escribe algo como:
+> "corre el sondeo diario siguiendo docs/sondeo-runbook.md contra
+> https://marketplace-cotizaciones.vercel.app"
+
+Esta sesión SÍ tiene navegador e internet completos — así se probó toda la API
+en esta conversación. Toma un par de minutos al día.
+
+### B. Programarlo en tu propio computador (Windows Task Scheduler)
+
+Si quieres que se dispare solo, sin que tú lo pidas, se puede configurar el
+**Programador de tareas de Windows** para que todos los días a las 8am lance
+Claude Code en modo no interactivo con el prompt del runbook. Requiere:
+- Que tu computador esté encendido a esa hora.
+- Configurar una tarea en Windows que ejecute el CLI de Claude Code con el
+  prompt del runbook.
+
+Es más trabajo de configuración inicial. Si te interesa, pídemelo en una
+sesión y lo armamos paso a paso.

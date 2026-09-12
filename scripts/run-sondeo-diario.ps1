@@ -42,13 +42,13 @@ if ([string]::IsNullOrWhiteSpace($appUrl) -or [string]::IsNullOrWhiteSpace($cron
 }
 
 $prompt = @"
-Eres un agente NO INTERACTIVO (corres desatendido via Task Scheduler, nadie va a leer preguntas ni responderte). Tu unica tarea es el "sondeo diario de cotizaciones" del proyecto marketplace-cotizaciones. Ejecuta directamente los pasos de abajo sin explorar el resto del repositorio, sin listar archivos, sin comentar sobre otros archivos que encuentres (esta carpeta puede tener archivos sueltos de otros proyectos que NO tienen nada que ver con esta tarea - ignoralos por completo, no los leas ni los menciones). No hagas preguntas: si algo no esta claro, toma la decision mas conservadora (ver regla innegociable abajo) y sigue.
+Eres el agente del "sondeo diario de cotizaciones" del proyecto marketplace-cotizaciones.
 
 Contexto fijo:
 - APP_URL = $appUrl
 - CRON_SECRET = $cronSecret
 - Usa el header ``Authorization: Bearer <CRON_SECRET>`` en TODAS las llamadas a {APP_URL}/api/sondeo/*.
-- El UNICO archivo del repositorio que debes leer es docs/sondeo-runbook.md (seccion "Procedimiento"). Leelo y siguelo paso a paso: 1) GET worklist, 2) POST abrir revision, 3) por cada producto con faltantes>0 conseguir cotizaciones reales, 4) POST cargar cotizaciones, 5) PATCH cerrar la revision con resumen, 6) verificar con GET worklist de nuevo.
+- Estas parado en la carpeta del repositorio. Lee primero docs/sondeo-runbook.md (seccion "Procedimiento") y siguelo paso a paso: 1) GET worklist, 2) POST abrir revision, 3) por cada producto con faltantes>0 conseguir cotizaciones reales, 4) POST cargar cotizaciones, 5) PATCH cerrar la revision con resumen, 6) verificar con GET worklist de nuevo.
 
 Como buscar proveedores:
 - Fuente principal: Alibaba, usando urlBusquedaAlibaba / terminosBusqueda de cada item de la worklist.
@@ -57,10 +57,10 @@ Como buscar proveedores:
 
 Regla innegociable: NUNCA inventes ni estimes nombres de proveedores, precios, paises, MOQ ni URLs. Cada cotizacion que subas debe venir de una fuente que realmente consultaste en esta corrida. Si para algun producto no logras conseguir cotizaciones reales, dejalo pendiente, anotalo en el resumen, y pon el estado de la revision en "PARCIAL" o "FALLIDA", explicando la causa.
 
-Al terminar (SIEMPRE, incluso si la worklist vino vacia o algo fallo):
+Al terminar:
 1. Cierra la revision (PATCH /api/sondeo/revisiones/{id}) con estado, contadores y un resumen en markdown.
 2. No modifiques archivos del repositorio, no hagas commits ni pushes - esta tarea solo hace llamadas HTTP.
-3. Termina con un resumen de 3-5 lineas en espanol. No termines con preguntas ni pidas confirmacion de nada - esta es tu unica oportunidad de actuar, nadie leera una pregunta.
+3. Termina con un resumen de 3-5 lineas en espanol.
 "@
 
 Write-Log "Iniciando sondeo diario..."

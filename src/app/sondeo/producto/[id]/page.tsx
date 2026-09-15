@@ -30,9 +30,15 @@ export default async function SondeoProductoPage({
         orderBy: { fechaRevision: "desc" },
         take: 500,
       },
+      itemsProyecto: {
+        select: { cantidad: true, proyecto: { select: { nombre: true } } },
+        take: 1,
+      },
     },
   });
   if (!producto) notFound();
+
+  const cantidadSugerida = producto.itemsProyecto[0]?.cantidad ?? null;
 
   const cotiz = producto.cotizacionesMercado;
   // Solo se agrupan cotizaciones en la MISMA moneda del producto — mezclar
@@ -238,7 +244,13 @@ export default async function SondeoProductoPage({
           </div>
         </div>
 
-        <SondeoCotizacionesTabla filas={filas} />
+        <SondeoCotizacionesTabla
+          filas={filas}
+          productoNombre={[producto.nombre, producto.marca, producto.modelo]
+            .filter(Boolean)
+            .join(" ")}
+          cantidadSugerida={cantidadSugerida}
+        />
       </div>
     </main>
   );

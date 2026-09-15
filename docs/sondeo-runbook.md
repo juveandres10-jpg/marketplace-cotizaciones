@@ -54,7 +54,16 @@ curl -s -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/sondeo/worklist?di
       - `precioUnit` y `moneda` — si hay rango, usa el precio más bajo del rango
         y anota el rango completo en `notas`
       - `moq` — cantidad mínima de pedido
-      - `incoterm` — FOB / CIF / EXW si aparece
+      - `incoterm` — **revisa la ficha completa del producto**, no solo el precio
+        (a veces está en una tabla de "Trade Terms" / "Shipping" / "Port"). Casi
+        todas las fábricas chinas en Alibaba cotizan **FOB** por defecto — si la
+        página no lo dice explícitamente pero es una ficha típica de exportación
+        de fábrica, escribe `"FOB (no especificado explícitamente)"` en vez de
+        dejarlo vacío. Solo déjalo vacío si de verdad no hay ninguna pista.
+        **No inventes CIF ni un puerto de destino** — eso lo calcula la app
+        aparte con la tarifa de flete que el usuario cargó manualmente
+        (`Producto.fleteEstimadoUnit`); tu trabajo es solo reportar el incoterm
+        real de la oferta (normalmente FOB/EXW en fábrica).
       - `tiempoEntregaDias` — lead time si aparece
       - `notas` — rango de precio, potencia/especificación, "Verified Supplier", años, etc.
    3. Prioriza proveedores con "Verified Supplier" / "Trade Assurance" y varios

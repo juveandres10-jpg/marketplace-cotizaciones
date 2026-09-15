@@ -42,7 +42,10 @@ export async function GET(req: Request) {
 
   const items = productos.map((p) => {
     const recientes = p.cotizacionesMercado;
+    // Solo se promedia en la moneda del producto — mezclar monedas sin una
+    // tasa de cambio real daría un número engañoso.
     const precios = recientes
+      .filter((c) => c.moneda === p.moneda)
       .map((c) => c.precioUnit)
       .filter((x): x is number => x != null);
     const min = precios.length ? Math.min(...precios) : null;
@@ -71,6 +74,14 @@ export async function GET(req: Request) {
         terminos
       )}`,
       precioMercado: { min, max, promedio, muestras: precios.length },
+      fleteEstimado: p.fleteEstimadoUnit
+        ? {
+            porUnidad: p.fleteEstimadoUnit,
+            destino: p.fleteEstimadoDestino,
+            notas: p.fleteEstimadoNotas,
+            cifEstimadoMin: min != null ? min + p.fleteEstimadoUnit : null,
+          }
+        : null,
       proveedoresRecientes: recientes.slice(0, 10).map((c) => ({
         nombre: c.proveedorNombre,
         pais: c.proveedorPais,

@@ -56,6 +56,17 @@ externos (Alibaba, etc.), no empresas registradas.
 | `GET/PATCH/DELETE /api/sondeo/cotizaciones[/id]` | Consultar / corregir |
 | `PATCH /api/sondeo/productos/[id]` | Activar seguimiento / cambiar el mínimo |
 
+**CIF estimado:** `Producto.fleteEstimadoUnit` (+ `fleteEstimadoDestino`,
+`fleteEstimadoNotas`) — el usuario ingresa su tarifa real de flete/seguro por
+unidad (nunca se inventa). Con eso la app calcula un "CIF estimado" = precio +
+flete, solo sobre cotizaciones en la misma moneda del producto (no se mezclan
+monedas sin una tasa de cambio real). Se configura desde `/sondeo/producto/[id]`,
+se ve en esa página y en la exportación a Excel.
+
+**Exportar a Excel:** `GET /api/sondeo/exportar?productoId=&dias=` — hoja
+"Cotizaciones" (detalle + CIF estimado) y hoja "Documentos soporte" (enlaces de
+origen de cada precio, como respaldo/evidencia).
+
 **Automatización:** `docs/sondeo-runbook.md` (procedimiento paso a paso, también
 usable como prompt de la tarea programada) y `docs/sondeo-fase2-despliegue.md`
 (desplegar en Vercel + crear la routine con `/schedule`).

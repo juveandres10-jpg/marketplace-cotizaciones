@@ -64,7 +64,10 @@ export default async function SondeoPage({
     const enVentana = p.cotizacionesMercado.filter(
       (c) => c.fechaRevision >= ventana
     );
+    // Solo se promedia en la moneda del producto — mezclar monedas distintas
+    // sin una tasa de cambio real daría un número engañoso.
     const precios = enVentana
+      .filter((c) => c.moneda === p.moneda)
       .map((c) => c.precioUnit)
       .filter((x): x is number => x != null);
     const min = precios.length ? Math.min(...precios) : null;

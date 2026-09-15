@@ -34,7 +34,15 @@ export async function GET(req: Request) {
     },
     include: {
       producto: {
-        select: { nombre: true, marca: true, modelo: true, categoria: { select: { nombre: true } } },
+        select: {
+          nombre: true,
+          marca: true,
+          modelo: true,
+          moneda: true,
+          categoria: { select: { nombre: true } },
+          fleteEstimadoUnit: true,
+          fleteEstimadoDestino: true,
+        },
       },
       proyecto: { select: { nombre: true } },
       capturadoPor: { select: { nombre: true } },
@@ -66,11 +74,13 @@ export async function GET(req: Request) {
     { header: "Moneda", key: "moneda", width: 10 },
     { header: "Unidad", key: "unidad", width: 10 },
     { header: "MOQ", key: "moq", width: 10 },
-    { header: "Incoterm", key: "incoterm", width: 10 },
+    { header: "Incoterm", key: "incoterm", width: 26 },
     { header: "Entrega (días)", key: "entrega", width: 14 },
     { header: "Fuente", key: "fuente", width: 12 },
     { header: "Fecha", key: "fecha", width: 14 },
     { header: "Capturado por", key: "capturadoPor", width: 18 },
+    { header: "CIF estimado", key: "cifEstimado", width: 16 },
+    { header: "Destino CIF", key: "cifDestino", width: 26 },
     { header: "Notas", key: "notas", width: 40 },
   ];
   hojaCot.getRow(1).font = { bold: true };
@@ -81,6 +91,13 @@ export async function GET(req: Request) {
   };
 
   for (const c of cotizaciones) {
+    // El CIF solo se calcula si la cotización está en la misma moneda del
+    // producto — mezclar monedas sin una tasa de cambio real sería inventar
+    // el número. La tarifa de flete la ingresa el usuario, nunca el sondeo.
+    const aplicaCif =
+      c.producto.fleteEstimadoUnit != null &&
+      c.moneda === c.producto.moneda &&
+      c.precioUnit != null;
     hojaCot.addRow({
       producto: c.producto.nombre,
       marcaModelo: [c.producto.marca, c.producto.modelo].filter(Boolean).join(" "),
@@ -97,11 +114,16 @@ export async function GET(req: Request) {
       fuente: c.fuente,
       fecha: c.fechaRevision.toISOString().slice(0, 10),
       capturadoPor: c.capturadoPor?.nombre ?? "Sondeo automático",
+      cifEstimado: aplicaCif
+        ? Number((c.precioUnit! + c.producto.fleteEstimadoUnit!).toFixed(2))
+        : "",
+      cifDestino: aplicaCif ? c.producto.fleteEstimadoDestino ?? "CIF (destino no especificado)" : "",
       notas: c.notas ?? "",
     });
   }
   hojaCot.getColumn("precioUnit").numFmt = "#,##0.00";
-  hojaCot.autoFilter = { from: "A1", to: "P1" };
+  hojaCot.getColumn("cifEstimado").numFmt = "#,##0.00";
+  hojaCot.autoFilter = { from: "A1", to: "R1" };
   hojaCot.views = [{ state: "frozen", ySplit: 1 }];
 
   // ---- Hoja 2: Documentos soporte (enlaces de origen) ----

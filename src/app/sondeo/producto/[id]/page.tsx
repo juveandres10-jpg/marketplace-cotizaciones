@@ -35,9 +35,17 @@ export default async function SondeoProductoPage({
   if (!producto) notFound();
 
   const cotiz = producto.cotizacionesMercado;
+  // Solo se agrupan cotizaciones en la MISMA moneda del producto — mezclar
+  // monedas (USD, CAD, EUR, ZAR, ...) en un mismo mínimo/promedio sería
+  // inventar una comparación falsa sin una tasa de cambio real.
   const conPrecio = cotiz
-    .filter((c) => c.precioUnit != null)
+    .filter((c) => c.precioUnit != null && c.moneda === producto.moneda)
     .map((c) => ({ precio: c.precioUnit as number, fecha: c.fechaRevision }));
+  const otrasMonedas = new Set(
+    cotiz
+      .filter((c) => c.precioUnit != null && c.moneda !== producto.moneda)
+      .map((c) => c.moneda)
+  );
   const precios = conPrecio.map((c) => c.precio);
   const min = precios.length ? Math.min(...precios) : null;
   const max = precios.length ? Math.max(...precios) : null;
@@ -94,6 +102,10 @@ export default async function SondeoProductoPage({
             productoId={producto.id}
             seguimientoActivo={producto.seguimientoActivo}
             minCotizaciones={producto.minCotizaciones}
+            moneda={producto.moneda}
+            fleteEstimadoUnit={producto.fleteEstimadoUnit}
+            fleteEstimadoDestino={producto.fleteEstimadoDestino}
+            fleteEstimadoNotas={producto.fleteEstimadoNotas}
           />
         </div>
 
@@ -122,6 +134,59 @@ export default async function SondeoProductoPage({
             }
           />
         </div>
+
+        {otrasMonedas.size > 0 && (
+          <p className="text-xs text-gray-400 -mt-4 mb-6">
+            Los precios de arriba solo incluyen cotizaciones en {producto.moneda}.
+            Hay cotizaciones adicionales en {Array.from(otrasMonedas).join(", ")}{" "}
+            (visibles en la tabla de abajo) no incluidas aquí para no mezclar
+            monedas sin una tasa de cambio real.
+          </p>
+        )}
+
+        {producto.fleteEstimadoUnit != null && (
+          <div className="border border-brand-200 bg-brand-50 rounded-xl p-4 mb-6">
+            <div className="text-xs text-brand-700 font-medium mb-2">
+              {producto.fleteEstimadoDestino || "CIF estimado"} — precio +{" "}
+              {producto.moneda} {producto.fleteEstimadoUnit.toLocaleString()} de
+              flete/seguro por unidad (tarifa que ingresaste tú, no verificada por
+              el sondeo)
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <Stat
+                titulo="CIF estimado — mínimo"
+                valor={
+                  min != null
+                    ? `${producto.moneda} ${(min + producto.fleteEstimadoUnit).toLocaleString(
+                        undefined,
+                        { maximumFractionDigits: 2 }
+                      )}`
+                    : "—"
+                }
+              />
+              <Stat
+                titulo="CIF estimado — promedio"
+                valor={
+                  prom != null
+                    ? `${producto.moneda} ${(
+                        prom + producto.fleteEstimadoUnit
+                      ).toLocaleString(undefined, { maximumFractionDigits: 2 })}`
+                    : "—"
+                }
+              />
+            </div>
+            {producto.fleteEstimadoNotas && (
+              <p className="text-xs text-gray-500 mt-2">
+                {producto.fleteEstimadoNotas}
+              </p>
+            )}
+            <p className="text-xs text-gray-400 mt-2">
+              Solo aplica a las cotizaciones en {producto.moneda}; las que estén
+              en otra moneda no se suman aquí para no inventar una tasa de
+              cambio.
+            </p>
+          </div>
+        )}
 
         {serie.length >= 2 && min != null && max != null && (
           <div className="border rounded-xl bg-white p-4 mb-6">

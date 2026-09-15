@@ -8,6 +8,9 @@ export const dynamic = "force-dynamic";
 const schema = z.object({
   seguimientoActivo: z.boolean().optional(),
   minCotizaciones: z.number().int().min(1).max(50).optional(),
+  fleteEstimadoUnit: z.number().nonnegative().nullable().optional(),
+  fleteEstimadoDestino: z.string().max(200).nullable().optional(),
+  fleteEstimadoNotas: z.string().max(1000).nullable().optional(),
 });
 
 // PATCH /api/sondeo/productos/[id]  -> configura el seguimiento de un producto
@@ -38,5 +41,8 @@ export async function PATCH(
     id: producto.id,
     seguimientoActivo: producto.seguimientoActivo,
     minCotizaciones: producto.minCotizaciones,
+    fleteEstimadoUnit: producto.fleteEstimadoUnit,
+    fleteEstimadoDestino: producto.fleteEstimadoDestino,
+    fleteEstimadoNotas: producto.fleteEstimadoNotas,
   });
 }

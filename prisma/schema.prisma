@@ -101,6 +101,14 @@ model Producto {
   seguimientoActivo Boolean @default(true) // entra en la revisión diaria
   minCotizaciones   Int     @default(5) // objetivo mínimo de cotizaciones por revisión
 
+  // Flete + seguro estimado por unidad para llegar a destino (ej. CIF Cartagena).
+  // Lo ingresa el usuario (su tarifa real con naviera/agente aduanal) — el sistema
+  // NUNCA inventa este número. Se usa solo para calcular un CIF estimado sobre
+  // las cotizaciones que estén en la misma moneda que `moneda` de este producto.
+  fleteEstimadoUnit    Float?
+  fleteEstimadoDestino String? // ej. "CIF Puerto de Cartagena, Colombia"
+  fleteEstimadoNotas   String? // ej. "Cotizado con Agencia XYZ, contenedor 40ft, sep 2026"
+
   itemsCotizacion     ItemCotizacion[]
   itemsProyecto       ItemProyecto[]
   cotizacionesMercado CotizacionMercado[]

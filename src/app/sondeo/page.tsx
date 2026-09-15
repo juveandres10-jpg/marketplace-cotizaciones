@@ -109,6 +109,12 @@ export default async function SondeoPage({
             </p>
           </div>
           <div className="flex gap-2">
+            <a
+              href="/api/sondeo/exportar"
+              className="border px-4 py-2 rounded-lg font-medium hover:bg-gray-50 text-sm"
+            >
+              Exportar a Excel
+            </a>
             <Link
               href="/sondeo/nueva-cotizacion"
               className="bg-brand-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-brand-700 text-sm"

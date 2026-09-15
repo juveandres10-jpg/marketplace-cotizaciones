@@ -151,6 +151,12 @@ export default async function SondeoProductoPage({
           <h2 className="font-semibold text-lg">Cotizaciones de mercado</h2>
           <div className="flex gap-2 text-sm">
             <a
+              href={`/api/sondeo/exportar?productoId=${producto.id}`}
+              className="border px-3 py-1.5 rounded-lg hover:bg-gray-50"
+            >
+              Exportar a Excel
+            </a>
+            <a
               href={urlAlibaba}
               target="_blank"
               rel="noopener noreferrer"

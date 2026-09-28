@@ -25,6 +25,9 @@ export function NavBar() {
           <Link href="/sondeo" className="text-sm text-gray-600 hover:text-gray-900">
             {t.nav.sondeo}
           </Link>
+          <Link href="/mercadeo" className="text-sm text-gray-600 hover:text-gray-900">
+            {t.nav.mercadeo}
+          </Link>
         </div>
         <div className="flex items-center gap-3 text-sm">
           <div className="flex border rounded-lg overflow-hidden text-xs">

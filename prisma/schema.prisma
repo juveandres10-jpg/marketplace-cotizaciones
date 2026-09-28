@@ -46,6 +46,7 @@ model Usuario {
   cotizacionesEnviadas Cotizacion[]        @relation("CotizacionesEnviadasPor")
   archivosSubidos      ArchivoCotizacion[] @relation("ArchivosSubidosPor")
   sondeosCapturados    CotizacionMercado[] @relation("SondeosCapturadosPor")
+  planesMercadeo       PlanSemanal[]       @relation("PlanesCreadosPor")
 }
 
 enum TipoEmpresa {
@@ -69,6 +70,11 @@ model Empresa {
   productos    Producto[]   @relation("ProductosDeProveedor")
   proyectos    Proyecto[]   @relation("ProyectosDeEmpresa")
   cotizaciones Cotizacion[] @relation("CotizacionesDeProveedor")
+
+  proyectosVenta      ProyectoVenta[]
+  metricasPublicacion MetricaPublicacion[]
+  snapshotsCuenta     SnapshotCuenta[]
+  planesMercadeo      PlanSemanal[]
 }
 
 // ------------------------------------------------------------
@@ -286,4 +292,192 @@ model CotizacionMercado {
 
   @@index([productoId, fechaRevision])
   @@index([revisionId])
+}
+
+// ------------------------------------------------------------
+// Mercadeo automatizado (constructora)
+// Análisis de métricas de Facebook/Instagram -> plan semanal de
+// publicaciones y pauta -> aprobación por correo -> publicación/pauta
+// en Meta. Nada se pauta (no se gasta dinero) sin una aprobación.
+// ------------------------------------------------------------
+
+enum PlataformaSocial {
+  FACEBOOK
+  INSTAGRAM
+}
+
+enum FormatoPieza {
+  IMAGEN
+  CARRUSEL
+  VIDEO
+  REEL
+  HISTORIA
+}
+
+enum ObjetivoPauta {
+  LEADS // tráfico a landing / formulario para captar datos
+  MENSAJES // conversaciones por WhatsApp / Messenger
+  TRAFICO
+  ALCANCE
+}
+
+enum FuenteMetrica {
+  META_API
+  MANUAL
+}
+
+enum EstadoPlan {
+  BORRADOR
+  PENDIENTE_APROBACION
+  APROBADO
+  RECHAZADO
+  PUBLICADO // aprobado y enviado a Meta
+}
+
+// Proyecto inmobiliario que se está vendiendo/promocionando.
+// Es la "información que tenemos" para generar piezas y copies:
+// la app nunca inventa precios ni características que no estén aquí.
+model ProyectoVenta {
+  id                 String   @id @default(cuid())
+  empresaId          String
+  empresa            Empresa  @relation(fields: [empresaId], references: [id])
+  nombre             String
+  tipoInmueble       String   @default("Apartamentos") // Apartamentos, Casas, Lotes, VIS, Oficinas...
+  ciudad             String
+  zona               String? // barrio / sector
+  direccion          String?
+  latitud            Float? // para segmentar la pauta por radio alrededor del proyecto
+  longitud           Float?
+  precioDesde        Float?
+  moneda             String   @default("COP")
+  areaDesde          Float? // m2
+  habitaciones       String? // ej. "2 y 3 alcobas"
+  amenidades         String? // ej. "Piscina, gimnasio, BBQ, parque infantil"
+  diferenciales      String? // ej. "Aplica subsidio Mi Casa Ya, entrega 2027"
+  publicoObjetivo    String? // ej. "Familias jóvenes, primera vivienda"
+  urlLanding         String?
+  whatsapp           String? // número en formato internacional, ej. 573001234567
+  imagenUrl          String? // render/foto pública que se usa de fondo en las piezas
+  presupuestoSemanal Float? // presupuesto de pauta sugerido por semana
+  activo             Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  planes   PlanSemanal[]
+  metricas MetricaPublicacion[]
+}
+
+// Métricas de una publicación (orgánica o pauta) en una red social.
+model MetricaPublicacion {
+  id               String           @id @default(cuid())
+  empresaId        String
+  empresa          Empresa          @relation(fields: [empresaId], references: [id])
+  proyectoVentaId  String?
+  proyectoVenta    ProyectoVenta?   @relation(fields: [proyectoVentaId], references: [id], onDelete: SetNull)
+  plataforma       PlataformaSocial
+  fuente           FuenteMetrica    @default(MANUAL)
+  externoId        String? // id de Meta (post, media o `ad:<id>`); null en carga manual
+  fechaPublicacion DateTime
+  horaConocida     Boolean          @default(true) // false en pauta (Meta solo reporta el día)
+  formato          FormatoPieza     @default(IMAGEN)
+  pagada           Boolean          @default(false)
+  texto            String?
+  alcance          Int              @default(0)
+  impresiones      Int              @default(0)
+  interacciones    Int              @default(0) // reacciones + comentarios + compartidos + guardados
+  clics            Int              @default(0)
+  leads            Int              @default(0)
+  mensajes         Int              @default(0)
+  gasto            Float            @default(0)
+  moneda           String           @default("COP")
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@unique([empresaId, plataforma, externoId])
+  @@index([empresaId, fechaPublicacion])
+}
+
+// Foto del estado de la cuenta en una fecha (seguidores).
+model SnapshotCuenta {
+  id         String           @id @default(cuid())
+  empresaId  String
+  empresa    Empresa          @relation(fields: [empresaId], references: [id])
+  plataforma PlataformaSocial
+  fecha      DateTime         @default(now())
+  seguidores Int
+  fuente     FuenteMetrica    @default(MANUAL)
+
+  @@index([empresaId, plataforma, fecha])
+}
+
+// Plan semanal de mercadeo: análisis + estrategia + piezas, sujeto a aprobación.
+model PlanSemanal {
+  id               String        @id @default(cuid())
+  empresaId        String
+  empresa          Empresa       @relation(fields: [empresaId], references: [id])
+  proyectoVentaId  String
+  proyectoVenta    ProyectoVenta @relation(fields: [proyectoVentaId], references: [id], onDelete: Cascade)
+  semanaInicio     DateTime // lunes 00:00 (zona horaria de la empresa)
+  estado           EstadoPlan    @default(BORRADOR)
+  presupuestoTotal Float         @default(0)
+  moneda           String        @default("COP")
+  analisis         Json // resultado de analizarMetricas()
+  estrategia       String // markdown
+  generadoCon      String        @default("plantilla") // "claude" | "plantilla"
+  creadoPorId      String?
+  creadoPor        Usuario?      @relation("PlanesCreadosPor", fields: [creadoPorId], references: [id], onDelete: SetNull)
+
+  // Aprobación por correo (se guarda solo el hash del token)
+  tokenAprobacionHash String?   @unique
+  tokenExpira         DateTime?
+  enviadoA            String?
+  enviadoEn           DateTime?
+  decididoPor         String?
+  decididoEn          DateTime?
+  comentarioDecision  String?
+
+  // Resultado de la publicación en Meta (ids creados, errores)
+  metaCampaignId String?
+  metaResultado  Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  piezas PiezaPlan[]
+
+  @@index([empresaId, semanaInicio])
+}
+
+// Una publicación/pauta dentro del plan.
+model PiezaPlan {
+  id              String           @id @default(cuid())
+  planId          String
+  plan            PlanSemanal      @relation(fields: [planId], references: [id], onDelete: Cascade)
+  orden           Int
+  fechaProgramada DateTime
+  plataforma      PlataformaSocial
+  formato         FormatoPieza
+  objetivo        ObjetivoPauta    @default(LEADS)
+  tema            String
+  pagada          Boolean          @default(false)
+  presupuesto     Float            @default(0)
+  diasPauta       Int              @default(0)
+  titular         String
+  copy            String
+  cta             String
+  hashtags        String?
+  conceptoVisual  String // descripción de la imagen/escena (sirve de prompt para diseño)
+  guionVideo      String? // guion por escenas para VIDEO/REEL/HISTORIA
+
+  // Publicación en Meta
+  estadoMeta  String? // PENDIENTE | PROGRAMADA | PUBLICADA | PAUTA_CREADA | ERROR
+  metaPostId  String?
+  metaAdSetId String?
+  metaAdId    String?
+  errorMeta   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([planId, orden])
 }

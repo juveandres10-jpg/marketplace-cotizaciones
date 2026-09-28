@@ -248,11 +248,15 @@ export function analizarMetricas(params: {
 
   // ---- Formatos ----
   const organicas = publicaciones.filter((p) => !p.pagada);
+  // Solo se puntúan publicaciones con alcance conocido: sin alcance (p. ej.
+  // cuando Meta no entrega insights de la Página) el puntaje quedaría dividido
+  // entre 1 y distorsionaría formatos y franjas.
+  const puntuables = organicas.filter((p) => p.alcance > 0 || p.impresiones > 0);
   const formatos = Array.from(new Set(publicaciones.map((p) => p.formato)));
   const porFormato: KpiFormato[] = formatos
     .map((formato) => {
       const pubs = publicaciones.filter((p) => p.formato === formato);
-      const org = organicas.filter((p) => p.formato === formato);
+      const org = puntuables.filter((p) => p.formato === formato);
       const alcance = pubs.reduce((a, p) => a + p.alcance, 0);
       const inter = pubs.reduce((a, p) => a + p.interacciones, 0);
       const contactos = pubs.reduce((a, p) => a + p.leads + p.mensajes, 0);
@@ -280,7 +284,7 @@ export function analizarMetricas(params: {
   }
 
   // ---- Mejores franjas día/hora (solo orgánicas con hora conocida) ----
-  const conHora = organicas.filter((p) => p.horaConocida);
+  const conHora = puntuables.filter((p) => p.horaConocida);
   const promedioGlobal = conHora.length
     ? conHora.reduce((a, p) => a + puntajePublicacion(p), 0) / conHora.length
     : 0;

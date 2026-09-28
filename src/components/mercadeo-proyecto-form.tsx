@@ -81,7 +81,8 @@ export function ProyectoVentaForm({ inicial }: { inicial?: ProyectoVentaInicial 
         const campos = j.detalle?.fieldErrors ? Object.entries(j.detalle.fieldErrors).map(([k, v]) => `${k}: ${(v as string[]).join(", ")}`) : [];
         throw new Error([j.error ?? "No se pudo guardar", ...campos].join(" · "));
       }
-      router.push("/mercadeo");
+      // Proyecto nuevo -> directo a su página para subir fotos y renders.
+      router.push(inicial?.id ? "/mercadeo" : `/mercadeo/proyectos/${j.id}`);
       router.refresh();
     } catch (e: any) {
       setError(e.message);
@@ -174,7 +175,7 @@ export function ProyectoVentaForm({ inicial }: { inicial?: ProyectoVentaInicial 
           <input value={f.urlLanding} onChange={set("urlLanding")} className={campo} placeholder="https://..." />
         </label>
         <label className="block">
-          <span className={etiqueta}>Render o foto principal (URL pública)</span>
+          <span className={etiqueta}>Imagen por URL (opcional: mejor súbelas en la galería de arriba)</span>
           <input value={f.imagenUrl} onChange={set("imagenUrl")} className={campo} placeholder="https://.../render.jpg" />
         </label>
         <label className="block">

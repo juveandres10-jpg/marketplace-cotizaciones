@@ -358,6 +358,7 @@ model ProyectoVenta {
   urlLanding         String?
   whatsapp           String? // número en formato internacional, ej. 573001234567
   imagenUrl          String? // render/foto pública que se usa de fondo en las piezas
+  imagenes           String[] @default([]) // galería subida a Vercel Blob; cada pieza usa una distinta
   presupuestoSemanal Float? // presupuesto de pauta sugerido por semana
   activo             Boolean  @default(true)
   createdAt          DateTime @default(now())

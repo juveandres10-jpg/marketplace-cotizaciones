@@ -5,6 +5,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { NavBar } from "@/components/nav-bar";
 import { ProyectoVentaForm } from "@/components/mercadeo-proyecto-form";
+import { GaleriaImagenesProyecto } from "@/components/mercadeo-galeria";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +24,7 @@ export default async function EditarProyectoVentaPage({ params }: { params: { id
           ← Mercadeo
         </Link>
         <h1 className="text-2xl font-bold mt-2 mb-6">{proyecto.nombre}</h1>
+        <GaleriaImagenesProyecto proyectoId={proyecto.id} iniciales={proyecto.imagenes} />
         <ProyectoVentaForm inicial={proyecto} />
       </div>
     </main>

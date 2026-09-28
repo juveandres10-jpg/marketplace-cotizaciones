@@ -7,6 +7,7 @@ import { ImageResponse } from "next/og";
 import { formatoMoneda } from "./estrategia";
 
 type PiezaImagen = {
+  orden?: number;
   formato: string;
   titular: string;
   cta: string;
@@ -23,7 +24,15 @@ type ProyectoImagen = {
   whatsapp: string | null;
   urlLanding: string | null;
   imagenUrl: string | null;
+  imagenes?: string[];
 };
+
+/** Fondo de la pieza: rota por la galería del proyecto (una imagen distinta por pieza). */
+export function fondoPieza(pieza: PiezaImagen, p: ProyectoImagen): string | null {
+  const galeria = [...(p.imagenes ?? []), ...(p.imagenUrl ? [p.imagenUrl] : [])];
+  if (galeria.length === 0) return null;
+  return galeria[Math.max(0, (pieza.orden ?? 1) - 1) % galeria.length];
+}
 
 const COLOR_PRIMARIO = process.env.MERCADEO_COLOR_PRIMARIO || "#1e40af";
 const COLOR_OSCURO = process.env.MERCADEO_COLOR_OSCURO || "#0f172a";
@@ -36,7 +45,8 @@ export function dimensionesPieza(formato: string) {
     : { width: 1080, height: 1080 };
 }
 
-function render(pieza: PiezaImagen, p: ProyectoImagen, conFoto: boolean) {
+function render(pieza: PiezaImagen, p: ProyectoImagen, fondo: string | null) {
+  const conFoto = Boolean(fondo);
   const { width, height } = dimensionesPieza(pieza.formato);
   const vertical = height > width;
   const ubicacion = [p.zona, p.ciudad].filter(Boolean).join(" · ");
@@ -59,10 +69,10 @@ function render(pieza: PiezaImagen, p: ProyectoImagen, conFoto: boolean) {
           background: `linear-gradient(135deg, ${COLOR_PRIMARIO} 0%, ${COLOR_OSCURO} 100%)`,
         }}
       >
-        {conFoto && p.imagenUrl && (
+        {fondo && (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={p.imagenUrl}
+            src={fondo}
             width={width}
             height={height}
             style={{ position: "absolute", top: 0, left: 0, width, height, objectFit: "cover" }}
@@ -76,7 +86,7 @@ function render(pieza: PiezaImagen, p: ProyectoImagen, conFoto: boolean) {
             width,
             height,
             display: "flex",
-            background: conFoto && p.imagenUrl
+            background: conFoto
               ? "linear-gradient(180deg, rgba(15,23,42,0.15) 0%, rgba(15,23,42,0.35) 45%, rgba(15,23,42,0.92) 100%)"
               : "transparent",
           }}
@@ -157,12 +167,13 @@ function render(pieza: PiezaImagen, p: ProyectoImagen, conFoto: boolean) {
 
 /** Devuelve el PNG de la pieza. Si el render de fondo no carga, usa el fondo de marca. */
 export async function generarImagenPieza(pieza: PiezaImagen, proyecto: ProyectoImagen): Promise<Buffer> {
-  if (proyecto.imagenUrl) {
+  const fondo = fondoPieza(pieza, proyecto);
+  if (fondo) {
     try {
-      return Buffer.from(await render(pieza, proyecto, true).arrayBuffer());
+      return Buffer.from(await render(pieza, proyecto, fondo).arrayBuffer());
     } catch (error) {
-      console.warn("[mercadeo] No se pudo usar imagenUrl de fondo, se usa fondo de marca:", error);
+      console.warn("[mercadeo] No se pudo usar la imagen de fondo, se usa fondo de marca:", error);
     }
   }
-  return Buffer.from(await render(pieza, proyecto, false).arrayBuffer());
+  return Buffer.from(await render(pieza, proyecto, null).arrayBuffer());
 }

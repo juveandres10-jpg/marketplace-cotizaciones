@@ -97,6 +97,9 @@ export default async function MercadeoPage() {
                     {p.precioDesde != null && ` · desde ${dinero(p.precioDesde, p.moneda)}`}
                     {!p.activo && " · inactivo"}
                   </div>
+                  <Link href={`/mercadeo/proyectos/${p.id}`} className="text-xs text-brand-700 hover:underline">
+                    {p.imagenes.length ? `${p.imagenes.length} fotos/renders` : "+ Subir fotos y renders"}
+                  </Link>
                   {!p.whatsapp && !p.urlLanding && (
                     <div className="text-xs text-amber-700 mt-1">
                       Sin WhatsApp ni landing: la pauta no tendrá a dónde llevar a los interesados.

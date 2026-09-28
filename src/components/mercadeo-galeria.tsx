@@ -2,9 +2,37 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { upload } from "@vercel/blob/client";
+import { put } from "@vercel/blob/client";
 
 const TAMANO_MAX_MB = 20;
+
+/**
+ * Pide a la app un token de subida de corta duración. Se hace a mano (en vez de
+ * `upload()` de @vercel/blob) para poder mostrar el motivo real si falla.
+ */
+async function pedirToken(proyectoId: string, pathname: string, multipart: boolean): Promise<string> {
+  const url = `${window.location.origin}/api/mercadeo/proyectos/${proyectoId}/imagenes`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      type: "blob.generate-client-token",
+      payload: { pathname, callbackUrl: url, multipart, clientPayload: null },
+    }),
+  });
+  const texto = await res.text();
+  let json: any = null;
+  try {
+    json = JSON.parse(texto);
+  } catch {
+    // respuesta no-JSON (p. ej. una página de login o de protección)
+  }
+  if (!res.ok || !json?.clientToken) {
+    const detalle = json?.error ?? (res.redirected ? `redirigido a ${res.url}` : texto.replace(/<[^>]+>/g, " ").trim().slice(0, 160));
+    throw new Error(`No se pudo autorizar la subida (HTTP ${res.status}): ${detalle || "respuesta vacía"}`);
+  }
+  return json.clientToken as string;
+}
 
 async function patch(proyectoId: string, cuerpo: Record<string, string>) {
   const res = await fetch(`/api/mercadeo/proyectos/${proyectoId}/imagenes`, {
@@ -35,11 +63,10 @@ export function GaleriaImagenesProyecto({ proyectoId, iniciales }: { proyectoId:
         if (f.size > TAMANO_MAX_MB * 1024 * 1024) throw new Error(`${f.name}: supera ${TAMANO_MAX_MB} MB.`);
         setProgreso(`Subiendo ${i + 1} de ${lista.length}: ${f.name}`);
         const limpio = f.name.normalize("NFD").replace(/[^\w.-]+/g, "-");
-        const blob = await upload(`mercadeo/${proyectoId}/${limpio}`, f, {
-          access: "public",
-          handleUploadUrl: `/api/mercadeo/proyectos/${proyectoId}/imagenes`,
-          contentType: f.type,
-        });
+        const pathname = `mercadeo/${proyectoId}/${limpio}`;
+        const multipart = f.size > 8 * 1024 * 1024;
+        const token = await pedirToken(proyectoId, pathname, multipart);
+        const blob = await put(pathname, f, { access: "public", token, contentType: f.type, multipart });
         setImagenes(await patch(proyectoId, { agregar: blob.url }));
       }
       router.refresh();

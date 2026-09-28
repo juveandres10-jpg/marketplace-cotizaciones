@@ -31,15 +31,19 @@ piezas (imagen + copy + guion de video), lo envía por correo para aprobación y
    próxima semana con tema comercial, formato, objetivo, titular, copy, CTA,
    hashtags, concepto visual y guion (reels/videos). Con `ANTHROPIC_API_KEY` lo
    redacta Claude (salida JSON validada); sin clave, plantillas.
-5. **Piezas gráficas** (`imagen.tsx`): PNG 1080×1080 (feed) o 1080×1920
+5. **Fotos y renders**: en la página del proyecto (`/mercadeo/proyectos/[id]`)
+   se suben a Vercel Blob (subida directa desde el navegador, hasta 20 MB por
+   imagen, máx. 30). Cada pieza usa una imagen distinta de la galería, en orden;
+   la primera es la principal. Requiere `BLOB_READ_WRITE_TOKEN`.
+6. **Piezas gráficas** (`imagen.tsx`): PNG 1080×1080 (feed) o 1080×1920
    (reel/historia) con el render del proyecto de fondo, titular, precio desde,
    CTA y contacto. `GET /api/mercadeo/piezas/[id]/imagen`.
-6. **Aprobación por correo**: informe completo (estado de las redes,
+7. **Aprobación por correo**: informe completo (estado de las redes,
    estrategia, calendario con miniaturas, inversión) con enlace de un solo uso
    que vence en 7 días. Quien aprueba no necesita cuenta. Aprobar exige un clic
    (POST), no basta con abrir el enlace. Rechazar exige comentario; el equipo
    edita las piezas y reenvía (el enlace anterior deja de servir).
-7. **Publicación en Meta** al aprobar (`meta.ts`):
+8. **Publicación en Meta** al aprobar (`meta.ts`):
    - Piezas pagadas → campaña (categoría especial *HOUSING*), conjunto de
      anuncios con presupuesto total y fechas, segmentación por radio alrededor
      del proyecto (mín. 25 km), imagen, creativo y anuncio. **Quedan en pausa**

@@ -95,7 +95,7 @@ verificar un dominio propio en Resend y agregarlos separados por coma.
 
 1. Business Manager → Usuarios del sistema → crear uno con acceso a la Página,
    la cuenta de Instagram y la cuenta publicitaria; generar token con permisos
-   `pages_read_engagement, pages_manage_posts, instagram_basic,
+   `pages_read_engagement, pages_read_user_content, pages_manage_posts, instagram_basic,
    instagram_content_publish, instagram_manage_insights, ads_management, ads_read`.
 2. Copiar `META_PAGE_ID`, `META_IG_USER_ID` (cuenta de Instagram profesional
    vinculada a la Página) y `META_AD_ACCOUNT_ID`.

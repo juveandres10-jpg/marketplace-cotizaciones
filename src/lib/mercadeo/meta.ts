@@ -152,19 +152,40 @@ export async function sincronizarMetricas(empresaId: string, dias = 90) {
       const token = await tokenDePagina();
       const campos =
         "id,message,created_time,attachments{media_type},reactions.summary(total_count).limit(0),comments.summary(total_count).limit(0),shares";
-      let posts: any[];
+      // Los seguidores se registran aunque la lectura de publicaciones falle.
       try {
-        posts = await paginar<any>(
-          `${e.pageId}/posts`,
-          { fields: `${campos},insights.metric(post_impressions_unique,post_clicks)`, since: desdeUnix, limit: 50 },
-          token,
-          (p) => new Date(p.created_time) < desde
-        );
-      } catch {
-        // Algunas métricas de insights cambian entre versiones de la API; sin
-        // ellas igual se registran las interacciones.
-        posts = await paginar<any>(`${e.pageId}/posts`, { fields: campos, since: desdeUnix, limit: 50 }, token, (p) => new Date(p.created_time) < desde);
+        const pagina = await graph<{ followers_count?: number }>("GET", e.pageId, { fields: "followers_count" }, token);
+        if (pagina.followers_count != null) {
+          await prisma.snapshotCuenta.create({
+            data: { empresaId, plataforma: "FACEBOOK", seguidores: pagina.followers_count, fuente: "META_API" },
+          });
+          resumen.seguidores++;
+        }
+      } catch (err: any) {
+        resumen.errores.push(err.message);
       }
+
+      // Se prueba de la consulta más completa a la más simple: algunas métricas
+      // de insights cambian entre versiones, y /posts puede exigir el permiso
+      // pages_read_user_content, que /published_posts no necesita.
+      const intentos: Array<[string, string]> = [
+        ["posts", `${campos},insights.metric(post_impressions_unique,post_clicks)`],
+        ["posts", campos],
+        ["published_posts", `${campos},insights.metric(post_impressions_unique,post_clicks)`],
+        ["published_posts", campos],
+      ];
+      let posts: any[] = [];
+      let ultimoError: unknown = null;
+      for (const [edge, fields] of intentos) {
+        try {
+          posts = await paginar<any>(`${e.pageId}/${edge}`, { fields, since: desdeUnix, limit: 50 }, token, (p) => new Date(p.created_time) < desde);
+          ultimoError = null;
+          break;
+        } catch (err) {
+          ultimoError = err;
+        }
+      }
+      if (ultimoError) throw ultimoError;
       for (const p of posts) {
         const tipo = p.attachments?.data?.[0]?.media_type;
         const interacciones =
@@ -185,13 +206,6 @@ export async function sincronizarMetricas(empresaId: string, dias = 90) {
           gasto: 0,
         });
         resumen.facebook++;
-      }
-      const pagina = await graph<{ followers_count?: number }>("GET", e.pageId, { fields: "followers_count" }, token);
-      if (pagina.followers_count != null) {
-        await prisma.snapshotCuenta.create({
-          data: { empresaId, plataforma: "FACEBOOK", seguidores: pagina.followers_count, fuente: "META_API" },
-        });
-        resumen.seguidores++;
       }
     } catch (err: any) {
       resumen.errores.push(err.message);

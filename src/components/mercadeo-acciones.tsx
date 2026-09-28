@@ -149,7 +149,7 @@ export function EnviarAprobacionForm({
           <input
             value={emails}
             onChange={(e) => setEmails(e.target.value)}
-            placeholder="gerencia@constructora.com"
+            placeholder="oasissas8@gmail.com"
             className="mt-1 w-full border rounded px-2 py-1.5 block text-sm"
           />
         </label>

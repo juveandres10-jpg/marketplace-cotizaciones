@@ -75,6 +75,22 @@ curl -X POST "$APP_URL/api/mercadeo/automatizar" \
   -d '{"acciones":["sincronizar","planificar"]}'
 ```
 
+## Cuenta única de la empresa: oasissas8@gmail.com
+
+Todo el módulo se maneja con el correo de las redes sociales de la empresa,
+`oasissas8@gmail.com`:
+
+| Servicio | Qué hacer con ese correo |
+|---|---|
+| Meta Business Manager | Debe ser administrador de la Página de Facebook, la cuenta de Instagram y la cuenta publicitaria (y el método de pago de la pauta). Desde ahí se crea el usuario del sistema y el token `META_ACCESS_TOKEN`. |
+| Aprobación de planes | `MERCADEO_EMAIL_APROBACION="oasissas8@gmail.com"`: ahí llega cada plan semanal para aprobar o rechazar. |
+| Envío de correos (Resend) | Crear la cuenta de Resend con ese correo. Así, sin verificar un dominio propio, se puede usar `EMAIL_FROM="onboarding@resend.dev"`: Resend solo entrega al correo dueño de la cuenta, que es justamente quien aprueba. Un Gmail no se puede usar como remitente en Resend. |
+| Claude (opcional) | Crear la cuenta de la API de Anthropic con ese correo para obtener `ANTHROPIC_API_KEY`. |
+| Usuario de la app | Registrar ese correo como usuario administrador de la empresa en el marketplace. |
+
+Si más adelante se aprueba desde otros correos (por ejemplo gerencia), hay que
+verificar un dominio propio en Resend y agregarlos separados por coma.
+
 ## Configurar Meta
 
 1. Business Manager → Usuarios del sistema → crear uno con acceso a la Página,

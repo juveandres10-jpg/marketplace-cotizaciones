@@ -68,6 +68,20 @@ solo crea los anuncios con el presupuesto aprobado. Controles:
 
 ## Tarea automática
 
+**Vercel Cron (incluido en `vercel.json`):**
+
+| Horario (UTC) | Hora Bogotá | Acción |
+|---|---|---|
+| `5 * * * *` | cada hora, minuto 05 | `publicar` (reels/historias/fotos de Instagram cuya hora llegó) |
+| `53 12 * * 4` | jueves 7:53 a. m. | `sincronizar,planificar` (métricas + plan de la próxima semana enviado a aprobación) |
+
+Vercel llama `GET /api/mercadeo/automatizar?acciones=…` con
+`Authorization: Bearer $CRON_SECRET` (hay que definir `CRON_SECRET` en el
+proyecto). Opera sobre `MERCADEO_EMPRESA_ID` o, si no está, sobre las empresas
+con proyectos de venta activos.
+
+**Manual / otro scheduler:**
+
 `POST /api/mercadeo/automatizar` con `Authorization: Bearer $MERCADEO_CRON_SECRET`
 (opera sobre `MERCADEO_EMPRESA_ID`). Body opcional `{"acciones": [...]}`:
 

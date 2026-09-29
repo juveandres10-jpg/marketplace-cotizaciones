@@ -1,0 +1,6 @@
+{
+  "crons": [
+    { "path": "/api/mercadeo/automatizar?acciones=publicar", "schedule": "5 * * * *" },
+    { "path": "/api/mercadeo/automatizar?acciones=sincronizar,planificar", "schedule": "53 12 * * 4" }
+  ]
+}

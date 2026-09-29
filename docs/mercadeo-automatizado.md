@@ -42,7 +42,7 @@ piezas (imagen + copy + guion de video), lo envía por correo para aprobación y
    reel/video/historia; esas piezas se publican como Reel en Instagram, video
    en la Página de Facebook, y los anuncios usan el video (con la imagen de la
    pieza como miniatura). Sin videos, esas piezas usan la imagen.
-6. **Piezas gráficas** (`imagen.tsx`): PNG 1080×1080 (feed) o 1080×1920
+6. **Piezas gráficas** (`imagen.tsx`): PNG 1080×1350 (feed 4:5) o 1080×1920
    (reel/historia) con el render del proyecto de fondo, titular, precio desde,
    CTA y contacto. `GET /api/mercadeo/piezas/[id]/imagen`.
 7. **Aprobación por correo**: informe completo (estado de las redes,

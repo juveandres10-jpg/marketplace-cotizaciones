@@ -88,6 +88,7 @@ export async function generarPlan(params: {
       piezas: {
         create: espacios.map((e, i) => ({
           videoUrl: videoParaEspacio(e.formato),
+          imagenFondo: proyecto.imagenes.length ? proyecto.imagenes[(e.orden - 1) % proyecto.imagenes.length] : null,
           orden: e.orden,
           fechaProgramada: e.fechaProgramada,
           plataforma: e.plataforma,

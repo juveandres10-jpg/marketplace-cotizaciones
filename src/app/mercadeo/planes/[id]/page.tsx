@@ -130,7 +130,9 @@ export default async function PlanPage({ params }: { params: { id: string } }) {
                       hashtags: p.hashtags,
                       pagada: p.pagada,
                       presupuesto: p.presupuesto,
+                      imagenFondo: p.imagenFondo,
                     }}
+                    imagenes={plan.proyectoVenta.imagenes}
                   />
                 )}
               </div>

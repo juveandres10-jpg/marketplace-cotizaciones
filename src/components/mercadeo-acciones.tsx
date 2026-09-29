@@ -251,9 +251,20 @@ export function PlanAccionesSecundarias({
 export function EditorPieza({
   planId,
   pieza,
+  imagenes = [],
 }: {
   planId: string;
-  pieza: { id: string; titular: string; copy: string; cta: string; hashtags: string | null; pagada: boolean; presupuesto: number };
+  pieza: {
+    id: string;
+    titular: string;
+    copy: string;
+    cta: string;
+    hashtags: string | null;
+    pagada: boolean;
+    presupuesto: number;
+    imagenFondo?: string | null;
+  };
+  imagenes?: string[];
 }) {
   const router = useRouter();
   const [abierto, setAbierto] = useState(false);
@@ -264,6 +275,7 @@ export function EditorPieza({
     hashtags: pieza.hashtags ?? "",
     pagada: pieza.pagada,
     presupuesto: pieza.presupuesto.toString(),
+    imagenFondo: pieza.imagenFondo ?? null,
   });
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -280,6 +292,9 @@ export function EditorPieza({
         hashtags: form.hashtags,
         pagada: form.pagada,
         presupuesto: form.pagada ? Number(form.presupuesto || 0) : 0,
+        ...(form.imagenFondo !== (pieza.imagenFondo ?? null) && form.imagenFondo !== null
+          ? { imagenFondo: form.imagenFondo }
+          : {}),
       });
       setAbierto(false);
       router.refresh();
@@ -325,6 +340,31 @@ export function EditorPieza({
           placeholder="#hashtags"
         />
       </div>
+      {imagenes.length > 0 && (
+        <div>
+          <div className="text-xs text-gray-500 mb-1">Foto de la pieza</div>
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            <button
+              type="button"
+              onClick={() => setForm({ ...form, imagenFondo: "" })}
+              className={`shrink-0 w-20 h-20 rounded border text-[10px] text-gray-500 ${form.imagenFondo === "" ? "ring-2 ring-brand-600" : ""}`}
+            >
+              Sin foto
+            </button>
+            {imagenes.map((url) => (
+              <button
+                key={url}
+                type="button"
+                onClick={() => setForm({ ...form, imagenFondo: url })}
+                className={`shrink-0 w-20 h-20 rounded overflow-hidden border ${form.imagenFondo === url ? "ring-2 ring-brand-600" : ""}`}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={url} alt="" loading="lazy" className="w-full h-full object-cover" />
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       <div className="flex items-center gap-3 flex-wrap">
         <label className="flex items-center gap-2">
           <input type="checkbox" checked={form.pagada} onChange={(e) => setForm({ ...form, pagada: e.target.checked })} />

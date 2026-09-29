@@ -110,33 +110,33 @@ function contenidoPlantilla(e: EspacioPieza, p: DatosProyecto): ContenidoPieza {
   let visual: string;
 
   if (t.startsWith("Precio")) {
-    titular = precio ? `Tu ${p.tipoInmueble.toLowerCase().replace(/s$/, "")} ${precio}` : `Haz realidad tu casa propia en ${p.nombre}`;
+    titular = /subsidio/i.test(p.diferenciales ?? "") ? "Compra tu vivienda con subsidio" : "Hazte propietario este año";
     cuerpo = `${p.nombre} en ${ubicacion}${precio ? `, ${precio}` : ""}.${p.diferenciales ? ` ${p.diferenciales}.` : ""} Te acompañamos con la cuota inicial y el crédito.`;
     visual = `Fachada o render principal de ${p.nombre} con el precio "${precio ?? "consulta precios"}" en grande y el logo de la constructora.`;
   } else if (t.startsWith("Amenidades")) {
-    titular = `Todo lo que tu familia necesita en ${p.nombre}`;
+    titular = "Espacios para disfrutar en familia";
     cuerpo = p.amenidades
       ? `Disfruta sin salir de casa: ${p.amenidades}. ${p.tipoInmueble} en ${ubicacion}.`
       : `Zonas comunes pensadas para compartir en familia. ${p.tipoInmueble} en ${ubicacion}.`;
     visual = `Carrusel/escena con las zonas comunes${p.amenidades ? ` (${p.amenidades})` : ""}, luz cálida de atardecer.`;
   } else if (t.startsWith("Estilo")) {
-    titular = `Imagina tu vida en ${p.nombre}`;
+    titular = "Imagina tu vida aquí";
     cuerpo = `${p.publicoObjetivo ? `Pensado para ${p.publicoObjetivo.toLowerCase()}. ` : ""}${p.tipoInmueble} en ${ubicacion}${detalles ? ` · ${detalles}` : ""}.`;
     visual = "Familia real (o foto de banco) disfrutando la sala/balcón del apartamento modelo, tono cercano y cálido.";
   } else if (t.startsWith("Avance")) {
-    titular = `Así avanza ${p.nombre}`;
+    titular = "Así avanza tu nuevo hogar";
     cuerpo = `Seguimos construyendo tu próximo hogar en ${ubicacion}. Compra con respaldo y conoce el avance de obra en persona.`;
     visual = "Foto o video actual de la obra (grúa, estructura, equipo trabajando) con texto 'Avance de obra' y la fecha.";
   } else if (t.startsWith("Invitación")) {
-    titular = `Te esperamos en la sala de ventas de ${p.nombre}`;
+    titular = "Ven a conocer tu nuevo hogar";
     cuerpo = `Conoce el apartamento modelo${p.direccion ? ` en ${p.direccion}` : ` en ${ubicacion}`} y resuelve todas tus dudas con un asesor.`;
     visual = "Apartamento modelo decorado, asesor recibiendo a una familia en la sala de ventas.";
   } else if (t.startsWith("Espacios")) {
-    titular = detalles ? `${detalles} para tu familia` : `Espacios que se adaptan a ti`;
+    titular = "Espacios pensados para ti";
     cuerpo = `Conoce la distribución de los ${p.tipoInmueble.toLowerCase()} de ${p.nombre}${area ? `, ${area}` : ""}.`;
     visual = "Plano 3D del apartamento tipo con las áreas destacadas.";
   } else {
-    titular = `${p.nombre}: ${p.tipoInmueble.toLowerCase()} en ${ubicacion}`;
+    titular = `Tu nuevo hogar en ${p.zona || p.ciudad}`;
     cuerpo = `Descubre ${p.nombre}, ${p.tipoInmueble.toLowerCase()} en ${ubicacion}${precio ? ` ${precio}` : ""}.${p.diferenciales ? ` ${p.diferenciales}.` : ""}`;
     visual = `Render aéreo de ${p.nombre} mostrando la ubicación y las vías de acceso cercanas.`;
   }
@@ -194,7 +194,11 @@ const EsquemaContenido = z.object({
     .array(
       z.object({
         orden: z.number().int().describe("El mismo 'orden' del espacio recibido"),
-        titular: z.string().describe("Máximo 60 caracteres, va sobre la imagen"),
+        titular: z
+          .string()
+          .describe(
+            "Titular de la imagen: máximo 36 caracteres, emocional y concreto (ej. 'Estrena casa propia con subsidio'). No repitas el nombre del proyecto, el precio ni la ubicación: ya aparecen en la pieza."
+          ),
         copy: z.string().describe("Texto de la publicación, 2-5 líneas, termina con la CTA"),
         cta: z.string().describe("Llamada a la acción corta"),
         hashtags: z.string().describe("5 a 8 hashtags separados por espacio"),

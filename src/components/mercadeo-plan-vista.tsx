@@ -200,19 +200,22 @@ export type PiezaVista = {
   videoUrl?: string | null;
   estadoMeta: string | null;
   errorMeta: string | null;
+  updatedAt?: Date | string;
 };
 
 export function PiezaTarjeta({ pieza, moneda, children }: { pieza: PiezaVista; moneda: string; children?: React.ReactNode }) {
   const vertical = pieza.formato === "REEL" || pieza.formato === "HISTORIA";
+  // Cambia cuando se edita la pieza, para no mostrar una imagen vieja en caché.
+  const version = pieza.updatedAt ? new Date(pieza.updatedAt).getTime() : 0;
   return (
     <div className="border rounded-xl bg-white p-4 flex gap-4 flex-col sm:flex-row">
-      <a href={`/api/mercadeo/piezas/${pieza.id}/imagen`} target="_blank" rel="noreferrer" className="shrink-0">
+      <a href={`/api/mercadeo/piezas/${pieza.id}/imagen?v=${version}`} target="_blank" rel="noreferrer" className="shrink-0">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={`/api/mercadeo/piezas/${pieza.id}/imagen`}
+          src={`/api/mercadeo/piezas/${pieza.id}/imagen?v=${version}`}
           alt={pieza.titular}
           loading="lazy"
-          className={`rounded-lg border bg-gray-100 ${vertical ? "w-32 h-[227px]" : "w-40 h-40"} object-cover`}
+          className={`rounded-lg border bg-gray-100 ${vertical ? "w-32 h-[227px]" : "w-40 h-[200px]"} object-cover`}
         />
       </a>
       <div className="flex-1 min-w-0">

@@ -1,16 +1,17 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
-import { del } from "@vercel/blob";
+import { del, put } from "@vercel/blob";
 import { prisma } from "@/lib/prisma";
 import { autorizarMercadeo } from "@/lib/mercadeo/auth";
 import { datosInvalidos, noAutorizado } from "@/lib/mercadeo/http";
-import { tokenBlob, variablesBlobPresentes } from "@/lib/blob-token";
+import { blobConfigurado, credencialesBlob, variablesBlobPresentes } from "@/lib/blob-token";
 
 export const dynamic = "force-dynamic";
 
 const MAX_IMAGENES = 30;
-const TAMANO_MAX_BYTES = 20 * 1024 * 1024; // 20 MB (renders en alta)
+// El navegador reduce las imágenes (máx. 2400 px) antes de enviarlas; el
+// cuerpo de una función de Vercel admite hasta 4.5 MB.
+const TAMANO_MAX_BYTES = 4 * 1024 * 1024;
 const TIPOS = ["image/jpeg", "image/png", "image/webp"];
 
 function sinBlob() {
@@ -18,11 +19,9 @@ function sinBlob() {
   return NextResponse.json(
     {
       error:
-        "El almacenamiento de imágenes no está configurado (no hay un token de Vercel Blob válido en esta publicación). " +
+        "El almacenamiento de imágenes no está configurado en esta publicación. " +
         "En Vercel: Storage → Blob → conectar al proyecto (Production) y luego Redeploy. " +
-        (presentes.length
-          ? `Variables encontradas: ${presentes.join(", ")} (ninguna con un token vercel_blob_rw_ válido).`
-          : "No se encontró ninguna variable de Blob."),
+        (presentes.length ? `Variables encontradas: ${presentes.join(", ")}.` : "No se encontró ninguna variable de Blob."),
     },
     { status: 500 }
   );
@@ -37,63 +36,64 @@ function esUrlDeBlob(url: string) {
   }
 }
 
-// POST /api/mercadeo/proyectos/[id]/imagenes
-// Protocolo de "client upload" de Vercel Blob: el navegador sube el archivo
-// directo a Blob (sin pasar por la función, que tiene límite de 4.5 MB) con un
-// token de corta duración que se emite aquí solo para proyectos de la empresa.
+// POST /api/mercadeo/proyectos/[id]/imagenes  (multipart/form-data, campo "file")
 export async function POST(req: Request, { params }: { params: { id: string } }) {
-  const token = tokenBlob();
-  if (!token) return sinBlob();
-  const body = (await req.json().catch(() => null)) as HandleUploadBody | null;
-  if (!body?.type) return NextResponse.json({ error: "Solicitud inválida" }, { status: 400 });
+  const actor = await autorizarMercadeo(req);
+  if (!actor) return noAutorizado();
+  if (!blobConfigurado()) return sinBlob();
 
-  // El aviso de "subida completada" lo envía Vercel (sin sesión); handleUpload
-  // verifica su firma. La URL se registra desde el navegador con PATCH.
-  if (body.type === "blob.generate-client-token") {
-    const actor = await autorizarMercadeo(req);
-    if (!actor) return noAutorizado();
-    const proyecto = await prisma.proyectoVenta.findFirst({
-      where: { id: params.id, empresaId: actor.empresaId },
-      select: { imagenes: true },
-    });
-    if (!proyecto) return NextResponse.json({ error: "No encontrado" }, { status: 404 });
-    if (proyecto.imagenes.length >= MAX_IMAGENES) {
-      return NextResponse.json({ error: `Máximo ${MAX_IMAGENES} imágenes por proyecto.` }, { status: 400 });
-    }
+  const proyecto = await prisma.proyectoVenta.findFirst({
+    where: { id: params.id, empresaId: actor.empresaId },
+    select: { imagenes: true },
+  });
+  if (!proyecto) return NextResponse.json({ error: "No encontrado" }, { status: 404 });
+  if (proyecto.imagenes.length >= MAX_IMAGENES) {
+    return NextResponse.json({ error: `Máximo ${MAX_IMAGENES} imágenes por proyecto.` }, { status: 400 });
   }
 
+  const form = await req.formData().catch(() => null);
+  const file = form?.get("file");
+  if (!(file instanceof File)) return NextResponse.json({ error: "No se envió ninguna imagen" }, { status: 400 });
+  if (!TIPOS.includes(file.type)) {
+    return NextResponse.json({ error: "Solo se permiten imágenes JPG, PNG o WEBP." }, { status: 400 });
+  }
+  if (file.size > TAMANO_MAX_BYTES) {
+    return NextResponse.json({ error: "La imagen supera 4 MB después de optimizarla." }, { status: 400 });
+  }
+
+  const nombre = (file.name || "imagen.jpg").normalize("NFD").replace(/[^\w.-]+/g, "-");
   try {
-    const r = await handleUpload({
-      token,
-      body,
-      request: req,
-      onBeforeGenerateToken: async (pathname) => {
-        if (!pathname.startsWith(`mercadeo/${params.id}/`)) throw new Error("Ruta de archivo inválida");
-        return { allowedContentTypes: TIPOS, maximumSizeInBytes: TAMANO_MAX_BYTES, addRandomSuffix: true };
-      },
-      onUploadCompleted: async () => {},
+    const blob = await put(`mercadeo/${params.id}/${nombre}`, file, {
+      access: "public",
+      addRandomSuffix: true,
+      contentType: file.type,
+      ...credencialesBlob(),
     });
-    return NextResponse.json(r);
+    // Se lee de nuevo para no perder imágenes subidas en paralelo.
+    const actual = await prisma.proyectoVenta.findUniqueOrThrow({ where: { id: params.id }, select: { imagenes: true } });
+    const imagenes = [...actual.imagenes, blob.url].slice(0, MAX_IMAGENES);
+    await prisma.proyectoVenta.update({ where: { id: params.id }, data: { imagenes } });
+    return NextResponse.json({ imagenes }, { status: 201 });
   } catch (error: any) {
-    return NextResponse.json({ error: error?.message ?? "No se pudo subir" }, { status: 400 });
+    console.error("[mercadeo] Error subiendo imagen a Blob:", error);
+    return NextResponse.json({ error: `Vercel Blob: ${error?.message ?? "no se pudo subir"}` }, { status: 502 });
   }
 }
 
 const schema = z
   .object({
-    agregar: z.string().url().optional(),
     quitar: z.string().url().optional(),
     principal: z.string().url().optional(), // mover al primer lugar
   })
-  .refine((d) => Boolean(d.agregar || d.quitar || d.principal), "Sin cambios");
+  .refine((d) => Boolean(d.quitar || d.principal), "Sin cambios");
 
-// PATCH /api/mercadeo/proyectos/[id]/imagenes -> registrar, quitar o marcar como principal
+// PATCH /api/mercadeo/proyectos/[id]/imagenes -> quitar o marcar como principal
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
   const actor = await autorizarMercadeo(req);
   if (!actor) return noAutorizado();
   const parsed = schema.safeParse(await req.json().catch(() => ({})));
   if (!parsed.success) return datosInvalidos(parsed.error);
-  const { agregar, quitar, principal } = parsed.data;
+  const { quitar, principal } = parsed.data;
 
   const proyecto = await prisma.proyectoVenta.findFirst({
     where: { id: params.id, empresaId: actor.empresaId },
@@ -102,18 +102,10 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   if (!proyecto) return NextResponse.json({ error: "No encontrado" }, { status: 404 });
 
   let imagenes = [...proyecto.imagenes];
-  if (agregar) {
-    if (!esUrlDeBlob(agregar) || !new URL(agregar).pathname.startsWith(`/mercadeo/${params.id}/`)) {
-      return NextResponse.json({ error: "URL de imagen no válida" }, { status: 400 });
-    }
-    if (!imagenes.includes(agregar)) imagenes.push(agregar);
-    imagenes = imagenes.slice(0, MAX_IMAGENES);
-  }
   if (quitar && imagenes.includes(quitar)) {
     imagenes = imagenes.filter((u) => u !== quitar);
-    const token = tokenBlob();
-    if (token && esUrlDeBlob(quitar)) {
-      await del(quitar, { token }).catch((e) => console.warn("[mercadeo] no se pudo borrar del Blob:", e));
+    if (blobConfigurado() && esUrlDeBlob(quitar)) {
+      await del(quitar, credencialesBlob()).catch((e) => console.warn("[mercadeo] no se pudo borrar del Blob:", e));
     }
   }
   if (principal && imagenes.includes(principal)) {

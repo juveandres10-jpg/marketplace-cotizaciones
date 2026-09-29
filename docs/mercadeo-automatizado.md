@@ -35,6 +35,13 @@ piezas (imagen + copy + guion de video), lo envía por correo para aprobación y
    se suben a Vercel Blob (subida directa desde el navegador, hasta 20 MB por
    imagen, máx. 100). Cada pieza usa una imagen distinta de la galería, en orden;
    la primera es la principal. Requiere `BLOB_READ_WRITE_TOKEN`.
+   **Videos** (renders animados, recorridos, avance de obra): MP4/MOV hasta
+   500 MB, suben directo del navegador a Vercel Blob (presigned URL en stores
+   OIDC, client token en stores clásicos; requiere `BLOB_WEBHOOK_PUBLIC_KEY`
+   en stores OIDC). Al generar el plan se asignan, en orden, a las piezas de
+   reel/video/historia; esas piezas se publican como Reel en Instagram, video
+   en la Página de Facebook, y los anuncios usan el video (con la imagen de la
+   pieza como miniatura). Sin videos, esas piezas usan la imagen.
 6. **Piezas gráficas** (`imagen.tsx`): PNG 1080×1080 (feed) o 1080×1920
    (reel/historia) con el render del proyecto de fondo, titular, precio desde,
    CTA y contacto. `GET /api/mercadeo/piezas/[id]/imagen`.
@@ -108,8 +115,8 @@ verificar un dominio propio en Resend y agregarlos separados por coma.
 
 ## Limitaciones conocidas
 
-- Los reels/videos se entregan como guion + imagen; la app no renderiza video.
-  Mientras no se cargue un video, esas piezas se publican/pautan con la imagen.
+- La app no edita ni genera video: usa los videos que se suben a la galería del
+  proyecto (y entrega el guion por escenas como guía de producción).
 - La pauta usa objetivo *Tráfico* (o *Alcance*) hacia la landing o WhatsApp;
   los formularios instantáneos de Meta (Lead Ads) no están integrados aún.
 - Los nombres de algunas métricas de la Graph API cambian entre versiones; si

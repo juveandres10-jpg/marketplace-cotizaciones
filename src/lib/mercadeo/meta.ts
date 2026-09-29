@@ -363,6 +363,35 @@ function textoCompleto(pieza: PiezaPlan) {
   return pieza.hashtags ? `${pieza.copy}\n\n${pieza.hashtags}` : pieza.copy;
 }
 
+const esperar = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Espera a que Meta termine de procesar un video subido (anuncios / página). */
+async function esperarVideoListo(videoId: string, token?: string, maxMs = 90_000) {
+  const inicio = Date.now();
+  while (Date.now() - inicio < maxMs) {
+    const v = await graph<{ status?: { video_status?: string } }>("GET", videoId, { fields: "status" }, token);
+    const estado = v.status?.video_status;
+    if (estado === "ready") return;
+    if (estado === "error") throw new ErrorMeta("Meta no pudo procesar el video (formato o duración no soportados).");
+    await esperar(5000);
+  }
+  throw new ErrorMeta("Meta sigue procesando el video; reintenta el envío en unos minutos.");
+}
+
+/** Espera a que un contenedor de Instagram (reel/historia con video) quede listo para publicar. */
+async function esperarContenedorInstagram(contenedorId: string, maxMs = 150_000) {
+  const inicio = Date.now();
+  while (Date.now() - inicio < maxMs) {
+    const c = await graph<{ status_code?: string; status?: string }>("GET", contenedorId, { fields: "status_code,status" });
+    if (c.status_code === "FINISHED") return;
+    if (c.status_code === "ERROR" || c.status_code === "EXPIRED") {
+      throw new ErrorMeta(`Instagram rechazó el video: ${c.status ?? c.status_code}. Usa MP4/MOV vertical 9:16, de 3 a 90 s.`);
+    }
+    await esperar(5000);
+  }
+  throw new ErrorMeta("Instagram sigue procesando el video; se reintentará en la próxima ejecución.");
+}
+
 export function urlImagenPieza(piezaId: string) {
   return `${urlBase()}/api/mercadeo/piezas/${piezaId}/imagen`;
 }
@@ -439,21 +468,44 @@ async function crearAnuncio(
   const imageHash = Object.values(img.images ?? {})[0]?.hash;
   if (!imageHash) throw new ErrorMeta("Meta no devolvió el hash de la imagen subida.");
 
-  const creative = await graph<{ id: string }>("POST", `act_${e.adAccountId}/adcreatives`, {
-    name: `${proyecto.nombre} #${pieza.orden}`,
-    object_story_spec: {
-      page_id: e.pageId,
-      ...(e.igUserId ? { instagram_user_id: e.igUserId } : {}),
+  const callToAction = {
+    type: pieza.objetivo === "MENSAJES" ? "CONTACT_US" : "LEARN_MORE",
+    value: { link },
+  };
+  let storySpec: Record<string, unknown>;
+  if (pieza.videoUrl) {
+    // Pieza con video: se sube a la cuenta publicitaria y la imagen de la pieza queda de miniatura.
+    const video = await graph<{ id: string }>("POST", `act_${e.adAccountId}/advideos`, {
+      file_url: pieza.videoUrl,
+      name: `${proyecto.nombre} #${pieza.orden}`,
+    });
+    await esperarVideoListo(video.id);
+    storySpec = {
+      video_data: {
+        video_id: video.id,
+        image_hash: imageHash,
+        message: textoCompleto(pieza),
+        title: pieza.titular,
+        call_to_action: callToAction,
+      },
+    };
+  } else {
+    storySpec = {
       link_data: {
         image_hash: imageHash,
         link,
         message: textoCompleto(pieza),
         name: pieza.titular,
-        call_to_action: {
-          type: pieza.objetivo === "MENSAJES" ? "CONTACT_US" : "LEARN_MORE",
-          value: { link },
-        },
+        call_to_action: callToAction,
       },
+    };
+  }
+  const creative = await graph<{ id: string }>("POST", `act_${e.adAccountId}/adcreatives`, {
+    name: `${proyecto.nombre} #${pieza.orden}`,
+    object_story_spec: {
+      page_id: e.pageId,
+      ...(e.igUserId ? { instagram_user_id: e.igUserId } : {}),
+      ...storySpec,
     },
   });
 
@@ -470,6 +522,24 @@ async function crearAnuncio(
 async function programarPostFacebook(pieza: PiezaPlan, proyecto: ProyectoVenta) {
   const e = env();
   const token = await tokenDePagina();
+  // Facebook permite programar entre 10 minutos y 30 días en el futuro.
+  const programableVideo = pieza.fechaProgramada.getTime() > Date.now() + 15 * 60_000;
+  if (pieza.videoUrl) {
+    const r = await graph<{ id: string }>(
+      "POST",
+      `${e.pageId}/videos`,
+      {
+        file_url: pieza.videoUrl,
+        title: pieza.titular,
+        description: textoCompleto(pieza),
+        ...(programableVideo
+          ? { published: false, scheduled_publish_time: Math.floor(pieza.fechaProgramada.getTime() / 1000) }
+          : {}),
+      },
+      token
+    );
+    return { postId: r.id, estado: programableVideo ? "PROGRAMADA" : "PUBLICADA" };
+  }
   const png = await generarImagenPieza(pieza, proyecto);
   const form = new FormData();
   form.set("source", new Blob([new Uint8Array(png)], { type: "image/png" }), "pieza.png");
@@ -491,7 +561,18 @@ async function programarPostFacebook(pieza: PiezaPlan, proyecto: ProyectoVenta) 
 async function publicarInstagram(pieza: PiezaPlan) {
   const e = env();
   const esHistoria = pieza.formato === "HISTORIA";
-  // Reels necesitan video; mientras la pieza sea una imagen se publica en el feed.
+  if (pieza.videoUrl) {
+    const contenedorVideo = await graph<{ id: string }>("POST", `${e.igUserId}/media`, {
+      video_url: pieza.videoUrl,
+      ...(esHistoria
+        ? { media_type: "STORIES" }
+        : { media_type: "REELS", caption: textoCompleto(pieza), share_to_feed: true }),
+    });
+    await esperarContenedorInstagram(contenedorVideo.id);
+    const pubVideo = await graph<{ id: string }>("POST", `${e.igUserId}/media_publish`, { creation_id: contenedorVideo.id });
+    return pubVideo.id;
+  }
+  // Sin video, la pieza se publica como imagen (en el feed o como historia).
   const contenedor = await graph<{ id: string }>("POST", `${e.igUserId}/media`, {
     image_url: urlImagenPieza(pieza.id),
     ...(esHistoria ? { media_type: "STORIES" } : { caption: textoCompleto(pieza) }),
@@ -573,13 +654,21 @@ export async function publicarInstagramPendientes() {
     take: 20,
   });
   const resultados: ResultadoPublicacion[] = [];
+  const inicio = Date.now();
   for (const pieza of piezas) {
+    // Los videos tardan en procesarse: se deja margen dentro del límite de la función.
+    if (Date.now() - inicio > 120_000) break;
     try {
       const id = await publicarInstagram(pieza);
       await prisma.piezaPlan.update({ where: { id: pieza.id }, data: { metaPostId: id, estadoMeta: "PUBLICADA", errorMeta: null } });
       resultados.push({ piezaId: pieza.id, orden: pieza.orden, ok: true, detalle: `Publicada en Instagram (${id})` });
     } catch (err: any) {
-      await prisma.piezaPlan.update({ where: { id: pieza.id }, data: { estadoMeta: "ERROR", errorMeta: err.message } });
+      // Si Instagram solo sigue procesando el video, la pieza queda en cola para la próxima ejecución.
+      const reintentar = String(err.message).includes("sigue procesando");
+      await prisma.piezaPlan.update({
+        where: { id: pieza.id },
+        data: { estadoMeta: reintentar ? "PENDIENTE" : "ERROR", errorMeta: err.message },
+      });
       resultados.push({ piezaId: pieza.id, orden: pieza.orden, ok: false, detalle: err.message });
     }
   }

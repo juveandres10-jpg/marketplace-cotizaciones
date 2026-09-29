@@ -66,6 +66,12 @@ export async function generarPlan(params: {
     tieneWhatsapp: Boolean(proyecto.whatsapp),
   });
   const contenido = await generarContenido(analisis, espacios, proyecto);
+  // Los videos de la galería se reparten entre las piezas de video, en orden.
+  let siguienteVideo = 0;
+  const videoParaEspacio = (formato: string) =>
+    proyecto.videos.length && (formato === "REEL" || formato === "VIDEO" || formato === "HISTORIA")
+      ? proyecto.videos[siguienteVideo++ % proyecto.videos.length]
+      : null;
   if (contenido.advertencia) analisis.alertas.push(contenido.advertencia);
 
   return prisma.planSemanal.create({
@@ -81,6 +87,7 @@ export async function generarPlan(params: {
       creadoPorId: params.creadoPorId ?? null,
       piezas: {
         create: espacios.map((e, i) => ({
+          videoUrl: videoParaEspacio(e.formato),
           orden: e.orden,
           fechaProgramada: e.fechaProgramada,
           plataforma: e.plataforma,

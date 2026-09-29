@@ -359,6 +359,7 @@ model ProyectoVenta {
   whatsapp           String? // número en formato internacional, ej. 573001234567
   imagenUrl          String? // render/foto pública que se usa de fondo en las piezas
   imagenes           String[] @default([]) // galería subida a Vercel Blob; cada pieza usa una distinta
+  videos             String[] @default([]) // renders animados / recorridos; se usan en reels y videos
   presupuestoSemanal Float? // presupuesto de pauta sugerido por semana
   activo             Boolean  @default(true)
   createdAt          DateTime @default(now())
@@ -469,6 +470,7 @@ model PiezaPlan {
   hashtags        String?
   conceptoVisual  String // descripción de la imagen/escena (sirve de prompt para diseño)
   guionVideo      String? // guion por escenas para VIDEO/REEL/HISTORIA
+  videoUrl        String? // video de la galería del proyecto asignado a esta pieza (reel/video/historia)
 
   // Publicación en Meta
   estadoMeta  String? // PENDIENTE | PROGRAMADA | PUBLICADA | PAUTA_CREADA | ERROR

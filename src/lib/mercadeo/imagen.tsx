@@ -186,8 +186,11 @@ export function beneficiosPieza(tema: string | undefined, p: ProyectoImagen): st
   const habitaciones = (p.habitaciones ?? "")
     .split(/[,;]| y /)
     .map((s) => s.trim())
+    // "3" solo no dice nada en una etiqueta: se completa como "3 habitaciones".
+    .map((s) => (/^\d+$/.test(s) ? `${s} ${s === "1" ? "habitación" : "habitaciones"}` : s))
     .filter((s) => s && s.length <= 24);
-  const area = p.areaDesde ? [`${p.areaDesde.toLocaleString("es-CO")} m²`] : [];
+  // Un área de vivienda mayor a 1.000 m² casi siempre es un error de captura (p. ej. 7065 por 70,65).
+  const area = p.areaDesde && p.areaDesde < 1000 ? [`${p.areaDesde.toLocaleString("es-CO")} m²`] : [];
   const diferenciales = (p.diferenciales ?? "")
     .split(/[.;\n]/)
     .map((s) => s.trim().replace(/^aplica\s+/i, ""))
@@ -331,8 +334,8 @@ function render(
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={logo.src}
-                  width={Math.min(260, Math.round((64 * logo.w) / logo.h))}
-                  height={64}
+                  width={Math.min(300, Math.round((84 * logo.w) / logo.h))}
+                  height={84}
                   style={{ objectFit: "contain" }}
                 />
               )}

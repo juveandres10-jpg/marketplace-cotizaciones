@@ -78,6 +78,52 @@ async function coloresDelLogo(url: string) {
   };
 }
 
+/**
+ * Recorta los márgenes vacíos del logo (transparentes o blancos) para que se vea
+ * grande en las piezas. Si algo falla, devuelve el archivo original.
+ */
+async function recortarLogo(f: File): Promise<File> {
+  try {
+    const bitmap = await createImageBitmap(f);
+    const canvas = document.createElement("canvas");
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    const ctx = canvas.getContext("2d")!;
+    ctx.drawImage(bitmap, 0, 0);
+    const { data, width, height } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    let x0 = width, y0 = height, x1 = -1, y1 = -1;
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const i = (y * width + x) * 4;
+        const vacio = data[i + 3] < 16 || (data[i] > 242 && data[i + 1] > 242 && data[i + 2] > 242);
+        if (!vacio) {
+          if (x < x0) x0 = x;
+          if (x > x1) x1 = x;
+          if (y < y0) y0 = y;
+          if (y > y1) y1 = y;
+        }
+      }
+    }
+    if (x1 < 0) return f;
+    const margen = Math.round(Math.max(x1 - x0, y1 - y0) * 0.04);
+    x0 = Math.max(0, x0 - margen);
+    y0 = Math.max(0, y0 - margen);
+    x1 = Math.min(width - 1, x1 + margen);
+    y1 = Math.min(height - 1, y1 + margen);
+    const w = x1 - x0 + 1;
+    const h = y1 - y0 + 1;
+    if (w > width * 0.95 && h > height * 0.95) return f; // no había márgenes que quitar
+    const salida = document.createElement("canvas");
+    salida.width = w;
+    salida.height = h;
+    salida.getContext("2d")!.drawImage(canvas, x0, y0, w, h, 0, 0, w, h);
+    const blob = await new Promise<Blob | null>((r) => salida.toBlob(r, "image/png"));
+    return blob ? new File([blob], f.name.replace(/\.[^.]+$/, "") + ".png", { type: "image/png" }) : f;
+  } catch {
+    return f;
+  }
+}
+
 function SelectorColor({ etiqueta, ayuda, valor, onChange }: { etiqueta: string; ayuda: string; valor: string; onChange: (v: string) => void }) {
   const [texto, setTexto] = useState(valor);
   useEffect(() => setTexto(valor), [valor]);
@@ -129,7 +175,7 @@ export function KitMarca({ inicial, esAdmin }: { inicial: Marca; esAdmin: boolea
     setEstado("Subiendo logo…");
     try {
       const form = new FormData();
-      form.set("file", f);
+      form.set("file", await recortarLogo(f));
       const res = await fetch("/api/mercadeo/marca/logo", { method: "POST", body: form });
       const j = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(j.error ?? "No se pudo subir el logo");

@@ -1,10 +1,12 @@
 /**
- * Token de lectura/escritura de Vercel Blob.
+ * Credenciales de Vercel Blob.
  *
- * Al conectar un Blob store, Vercel crea `BLOB_READ_WRITE_TOKEN`; pero si ya
- * existía una variable con ese nombre, la crea con prefijo (p. ej.
- * `OASIS_IMAGENES_READ_WRITE_TOKEN`). Se acepta cualquiera de las dos, siempre
- * que el valor tenga el formato de un token de Blob.
+ * Hay dos formas según cómo se creó el Blob store:
+ *  - Stores clásicos: token `vercel_blob_rw_…` en `BLOB_READ_WRITE_TOKEN`
+ *    (o con prefijo, p. ej. `OASIS_IMAGENES_READ_WRITE_TOKEN`, si ya existía
+ *    una variable con ese nombre al conectarlo).
+ *  - Stores nuevos: `BLOB_STORE_ID` + el token OIDC que Vercel inyecta en cada
+ *    función; el SDK (@vercel/blob >= 2) lo resuelve solo.
  */
 export function tokenBlob(): string | null {
   const directo = process.env.BLOB_READ_WRITE_TOKEN;
@@ -13,6 +15,16 @@ export function tokenBlob(): string | null {
     if (nombre.endsWith("READ_WRITE_TOKEN") && valor?.startsWith("vercel_blob_rw_")) return valor;
   }
   return null;
+}
+
+export function blobConfigurado(): boolean {
+  return Boolean(tokenBlob() || process.env.BLOB_STORE_ID);
+}
+
+/** Opciones de credencial para put/del: token clásico si existe; si no, OIDC automático. */
+export function credencialesBlob(): { token?: string } {
+  const token = tokenBlob();
+  return token ? { token } : {};
 }
 
 /** Nombres de variables tipo Blob presentes (sin valores), para diagnosticar. */

@@ -33,7 +33,7 @@ piezas (imagen + copy + guion de video), lo envía por correo para aprobación y
    redacta Claude (salida JSON validada); sin clave, plantillas.
 5. **Fotos y renders**: en la página del proyecto (`/mercadeo/proyectos/[id]`)
    se suben a Vercel Blob (subida directa desde el navegador, hasta 20 MB por
-   imagen, máx. 30). Cada pieza usa una imagen distinta de la galería, en orden;
+   imagen, máx. 100). Cada pieza usa una imagen distinta de la galería, en orden;
    la primera es la principal. Requiere `BLOB_READ_WRITE_TOKEN`.
 6. **Piezas gráficas** (`imagen.tsx`): PNG 1080×1080 (feed) o 1080×1920
    (reel/historia) con el render del proyecto de fondo, titular, precio desde,

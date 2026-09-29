@@ -8,7 +8,7 @@ import { blobConfigurado, credencialesBlob, variablesBlobPresentes } from "@/lib
 
 export const dynamic = "force-dynamic";
 
-const MAX_IMAGENES = 30;
+const MAX_IMAGENES = 100;
 // El navegador reduce las imágenes (máx. 2400 px) antes de enviarlas; el
 // cuerpo de una función de Vercel admite hasta 4.5 MB.
 const TAMANO_MAX_BYTES = 4 * 1024 * 1024;

@@ -198,7 +198,7 @@ export async function enviarPlanParaAprobacion(params: {
           <p style="margin:18px 0">
             <a href="${esc(enlace)}" style="background:#16a34a;color:#fff;padding:12px 22px;border-radius:8px;text-decoration:none;font-weight:bold">Revisar y aprobar</a>
             &nbsp;
-            <a href="${esc(enlace)}" style="color:#b91c1c">Rechazar con comentarios</a>
+            <a href="${esc(enlace)}" style="color:#b45309">Pedir correcciones</a>
           </p>
           ${alertas}
           <h3>Estado actual de las redes (últimos 90 días)</h3>

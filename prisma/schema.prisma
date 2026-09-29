@@ -438,6 +438,9 @@ model PlanSemanal {
   decididoEn          DateTime?
   comentarioDecision  String?
 
+  // Correcciones pedidas en lenguaje natural y lo que cambió la IA
+  historialCorrecciones Json?
+
   // Resultado de la publicación en Meta (ids creados, errores)
   metaCampaignId String?
   metaResultado  Json?

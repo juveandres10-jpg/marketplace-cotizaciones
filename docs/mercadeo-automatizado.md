@@ -50,6 +50,13 @@ piezas (imagen + copy + guion de video), lo envía por correo para aprobación y
    que vence en 7 días. Quien aprueba no necesita cuenta. Aprobar exige un clic
    (POST), no basta con abrir el enlace. Rechazar exige comentario; el equipo
    edita las piezas y reenvía (el enlace anterior deja de servir).
+   **Correcciones con IA**: en la página del plan ("Corregir con IA") o desde
+   el enlace de aprobación ("Pedir correcciones") se escribe lo que hay que
+   cambiar en lenguaje natural ("la entrega es noviembre 2026", "en la pieza 4
+   cambia la foto"). Claude ajusta solo las piezas afectadas, revisa la foto de
+   cada pieza (si trae escrito un dato equivocado la cambia por otra de la
+   galería) y el plan corregido se reenvía a aprobación. Queda registro en el
+   historial del plan. Requiere `ANTHROPIC_API_KEY`.
 8. **Publicación en Meta** al aprobar (`meta.ts`):
    - Piezas pagadas → campaña (categoría especial *HOUSING*), conjunto de
      anuncios con presupuesto total y fechas, segmentación por radio alrededor

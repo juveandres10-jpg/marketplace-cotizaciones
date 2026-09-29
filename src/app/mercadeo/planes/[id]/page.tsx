@@ -12,7 +12,8 @@ import {
   PiezaTarjeta,
   dinero,
 } from "@/components/mercadeo-plan-vista";
-import { EditorPieza, EnviarAprobacionForm, PlanAccionesSecundarias } from "@/components/mercadeo-acciones";
+import { CorregirPlanForm, EditorPieza, EnviarAprobacionForm, PlanAccionesSecundarias } from "@/components/mercadeo-acciones";
+import { correccionAutomaticaDisponible } from "@/lib/mercadeo/correcciones";
 import type { Analisis } from "@/lib/mercadeo/analisis";
 import { formatoFecha, formatoFechaHora } from "@/lib/mercadeo/fechas";
 
@@ -31,6 +32,13 @@ export default async function PlanPage({ params }: { params: { id: string } }) {
   const analisis = plan.analisis as unknown as Analisis;
   const editable = plan.estado === "BORRADOR" || plan.estado === "RECHAZADO";
   const pagadas = plan.piezas.filter((p) => p.pagada);
+  const historial = (Array.isArray(plan.historialCorrecciones) ? plan.historialCorrecciones : []) as Array<{
+    fecha: string;
+    autor: string;
+    alcance: string;
+    instrucciones: string;
+    resumen: string;
+  }>;
   const resultadoMeta = plan.metaResultado as { fecha: string; resultados: Array<{ orden: number; ok: boolean; detalle: string }> } | null;
 
   return (
@@ -81,6 +89,35 @@ export default async function PlanPage({ params }: { params: { id: string } }) {
               emailPorDefecto={process.env.MERCADEO_EMAIL_APROBACION ?? ""}
               enviadoA={plan.enviadoA}
             />
+          )}
+          {(editable || plan.estado === "PENDIENTE_APROBACION") && (
+            <div className="border-t pt-4">
+              <CorregirPlanForm
+                planId={plan.id}
+                piezas={plan.piezas.map((p) => ({ id: p.id, orden: p.orden, titular: p.titular }))}
+                disponible={correccionAutomaticaDisponible()}
+                hayDestinatario={Boolean(plan.enviadoA || process.env.MERCADEO_EMAIL_APROBACION)}
+              />
+            </div>
+          )}
+          {historial.length > 0 && (
+            <details className="text-sm">
+              <summary className="cursor-pointer text-gray-600">Historial de correcciones ({historial.length})</summary>
+              <ul className="mt-2 space-y-2">
+                {historial
+                  .slice()
+                  .reverse()
+                  .map((h, i) => (
+                    <li key={i} className="border-l-2 border-brand-100 pl-3">
+                      <div className="text-xs text-gray-500">
+                        {formatoFechaHora(h.fecha)} · {h.autor} · {h.alcance}
+                      </div>
+                      <div className="text-gray-700">“{h.instrucciones}”</div>
+                      <div className="text-gray-500">{h.resumen}</div>
+                    </li>
+                  ))}
+              </ul>
+            </details>
           )}
           {resultadoMeta && (
             <details className="text-sm">

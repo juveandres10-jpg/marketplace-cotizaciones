@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 const schema = z.object({
-  decision: z.enum(["aprobar", "rechazar"]),
+  decision: z.enum(["aprobar", "rechazar", "corregir"]),
   nombre: z.string().trim().min(2).max(200),
   comentario: z.string().trim().max(4000).optional(),
 });
@@ -18,8 +18,8 @@ const schema = z.object({
 export async function POST(req: Request, { params }: { params: { token: string } }) {
   const parsed = schema.safeParse(await req.json().catch(() => ({})));
   if (!parsed.success) return datosInvalidos(parsed.error);
-  if (parsed.data.decision === "rechazar" && !parsed.data.comentario) {
-    return NextResponse.json({ error: "Indica el motivo del rechazo para que el equipo pueda ajustar el plan." }, { status: 400 });
+  if (parsed.data.decision !== "aprobar" && !parsed.data.comentario) {
+    return NextResponse.json({ error: "Escribe qué hay que corregir para poder ajustar el plan." }, { status: 400 });
   }
   try {
     return NextResponse.json(await decidirPlan({ token: params.token, ...parsed.data }));

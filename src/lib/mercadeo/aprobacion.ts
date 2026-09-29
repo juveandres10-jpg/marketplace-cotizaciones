@@ -2,15 +2,16 @@
 // Aprobar es lo único que dispara la publicación y la pauta en Meta.
 
 import { prisma } from "@/lib/prisma";
-import { ErrorMercadeo, planPorToken } from "./servicio";
+import { ErrorMercadeo, enviarAprobacion, planPorToken } from "./servicio";
+import { aplicarCorrecciones, correccionAutomaticaDisponible } from "./correcciones";
 import { estadoConfiguracionMeta, publicarPlanEnMeta, type ResultadoPublicacion } from "./meta";
 
 export async function decidirPlan(params: {
   token: string;
-  decision: "aprobar" | "rechazar";
+  decision: "aprobar" | "rechazar" | "corregir";
   nombre: string;
   comentario?: string;
-}): Promise<{ estado: string; publicacion: ResultadoPublicacion[] | null; mensaje: string }> {
+}): Promise<{ estado: string; publicacion: ResultadoPublicacion[] | null; mensaje: string; enlace?: string }> {
   const plan = await planPorToken(params.token);
   if (!plan) throw new ErrorMercadeo("Enlace inválido o ya utilizado.", 404);
   if (plan.estado !== "PENDIENTE_APROBACION") {
@@ -34,8 +35,44 @@ export async function decidirPlan(params: {
   });
   if (actualizado.count === 0) throw new ErrorMercadeo("Este plan ya fue decidido.", 409);
 
+  if (!aprobado && params.decision === "corregir" && params.comentario && correccionAutomaticaDisponible()) {
+    // Se aplican las correcciones con IA y se reenvía el plan corregido a los mismos destinatarios.
+    let correccion;
+    try {
+      correccion = await aplicarCorrecciones({
+        planId: plan.id,
+        instrucciones: params.comentario,
+        autor: params.nombre,
+      });
+    } catch (error) {
+      console.error("[mercadeo] No se pudo aplicar la corrección automática:", error);
+      return {
+        estado: "RECHAZADO",
+        publicacion: null,
+        mensaje: "Recibimos tus correcciones, pero no se pudieron aplicar automáticamente. El equipo las hará y te reenviará el plan.",
+      };
+    }
+    const destinatarios = (plan.enviadoA ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+    const envio = await enviarAprobacion({ empresaId: plan.empresaId, planId: plan.id, destinatarios });
+    return {
+      estado: "PENDIENTE_APROBACION",
+      publicacion: null,
+      enlace: envio.enlace,
+      mensaje:
+        `Correcciones aplicadas: ${correccion.resumen} ` +
+        (envio.enviado ? "Te enviamos el plan corregido por correo." : "Revisa el plan corregido en el enlace de abajo."),
+    };
+  }
+
   if (!aprobado) {
-    return { estado: "RECHAZADO", publicacion: null, mensaje: "Plan rechazado. El equipo recibirá tus comentarios." };
+    return {
+      estado: "RECHAZADO",
+      publicacion: null,
+      mensaje:
+        params.decision === "corregir"
+          ? "Correcciones recibidas. El equipo ajustará el plan y te lo reenviará."
+          : "Plan rechazado. El equipo recibirá tus comentarios.",
+    };
   }
 
   const conf = estadoConfiguracionMeta();

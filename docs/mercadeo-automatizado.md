@@ -42,6 +42,10 @@ piezas (imagen + copy + guion de video), lo envía por correo para aprobación y
    reel/video/historia; esas piezas se publican como Reel en Instagram, video
    en la Página de Facebook, y los anuncios usan el video (con la imagen de la
    pieza como miniatura). Sin videos, esas piezas usan la imagen.
+   **Kit de marca** (`/mercadeo/marca`): logo de la empresa y colores
+   principal / oscuro / acento (con sugerencia automática a partir del logo y
+   vista previa en vivo). Se guardan en `Empresa` y se aplican a todas las
+   piezas, incluso las de planes ya generados.
 6. **Piezas gráficas** (`imagen.tsx`): PNG 1080×1350 (feed 4:5) o 1080×1920
    (reel/historia) con el render del proyecto de fondo, titular, precio desde,
    CTA y contacto. `GET /api/mercadeo/piezas/[id]/imagen`.
@@ -50,6 +54,13 @@ piezas (imagen + copy + guion de video), lo envía por correo para aprobación y
    que vence en 7 días. Quien aprueba no necesita cuenta. Aprobar exige un clic
    (POST), no basta con abrir el enlace. Rechazar exige comentario; el equipo
    edita las piezas y reenvía (el enlace anterior deja de servir).
+   **Correcciones con IA**: en la página del plan ("Corregir con IA") o desde
+   el enlace de aprobación ("Pedir correcciones") se escribe lo que hay que
+   cambiar en lenguaje natural ("la entrega es noviembre 2026", "en la pieza 4
+   cambia la foto"). Claude ajusta solo las piezas afectadas, revisa la foto de
+   cada pieza (si trae escrito un dato equivocado la cambia por otra de la
+   galería) y el plan corregido se reenvía a aprobación. Queda registro en el
+   historial del plan. Requiere `ANTHROPIC_API_KEY`.
 8. **Publicación en Meta** al aprobar (`meta.ts`):
    - Piezas pagadas → campaña (categoría especial *HOUSING*), conjunto de
      anuncios con presupuesto total y fechas, segmentación por radio alrededor

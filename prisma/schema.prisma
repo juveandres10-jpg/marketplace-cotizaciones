@@ -66,6 +66,12 @@ model Empresa {
   createdAt DateTime    @default(now())
   updatedAt DateTime    @updatedAt
 
+  // Kit de marca para las piezas de mercadeo
+  logoUrl       String?
+  colorPrimario String? // hex, ej. #1e3a8a
+  colorOscuro   String?
+  colorAcento   String?
+
   usuarios     Usuario[]
   productos    Producto[]   @relation("ProductosDeProveedor")
   proyectos    Proyecto[]   @relation("ProyectosDeEmpresa")
@@ -437,6 +443,9 @@ model PlanSemanal {
   decididoPor         String?
   decididoEn          DateTime?
   comentarioDecision  String?
+
+  // Correcciones pedidas en lenguaje natural y lo que cambió la IA
+  historialCorrecciones Json?
 
   // Resultado de la publicación en Meta (ids creados, errores)
   metaCampaignId String?

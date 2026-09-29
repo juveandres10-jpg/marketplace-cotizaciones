@@ -2,6 +2,7 @@ import { AnalisisVista, MarkdownSimple, PiezaTarjeta, dinero, ESTADO_PLAN_LABEL 
 import { AprobacionForm } from "@/components/mercadeo-acciones";
 import { planPorToken } from "@/lib/mercadeo/servicio";
 import { estadoConfiguracionMeta } from "@/lib/mercadeo/meta";
+import { correccionAutomaticaDisponible } from "@/lib/mercadeo/correcciones";
 import type { Analisis } from "@/lib/mercadeo/analisis";
 import { formatoFecha } from "@/lib/mercadeo/fechas";
 
@@ -55,7 +56,7 @@ export default async function AprobacionPage({ params }: { params: { token: stri
                   ? `se programan las publicaciones y se crea la pauta en Meta${meta.activarAlAprobar ? " (activa de inmediato)" : " (en pausa, para activarla desde el Administrador de anuncios)"}. La pauta se cobra al método de pago de la cuenta publicitaria.`
                   : "Meta no está conectado; el equipo publicará las piezas manualmente."}
               </p>
-              <AprobacionForm token={params.token} />
+              <AprobacionForm token={params.token} correccionAutomatica={correccionAutomaticaDisponible()} />
             </>
           )}
         </div>

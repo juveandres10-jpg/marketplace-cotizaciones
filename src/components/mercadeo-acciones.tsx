@@ -398,21 +398,22 @@ export function EditorPieza({
   );
 }
 
-export function AprobacionForm({ token }: { token: string }) {
+export function AprobacionForm({ token, correccionAutomatica = false }: { token: string; correccionAutomatica?: boolean }) {
   const [nombre, setNombre] = useState("");
   const [comentario, setComentario] = useState("");
-  const [cargando, setCargando] = useState<"aprobar" | "rechazar" | null>(null);
+  const [cargando, setCargando] = useState<"aprobar" | "corregir" | null>(null);
   const [resultado, setResultado] = useState<{
     estado: string;
     mensaje: string;
+    enlace?: string;
     publicacion: Array<{ orden: number; ok: boolean; detalle: string }> | null;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function decidir(decision: "aprobar" | "rechazar") {
+  async function decidir(decision: "aprobar" | "corregir") {
     setError(null);
     if (nombre.trim().length < 2) return setError("Escribe tu nombre para dejar registro de la decisión.");
-    if (decision === "rechazar" && !comentario.trim()) return setError("Indica qué se debe ajustar.");
+    if (decision === "corregir" && comentario.trim().length < 3) return setError("Escribe qué hay que corregir.");
     if (decision === "aprobar" && !confirm("Al aprobar se programan las publicaciones y se crea la pauta en Meta. ¿Continuar?")) return;
     setCargando(decision);
     try {
@@ -430,9 +431,15 @@ export function AprobacionForm({ token }: { token: string }) {
   }
 
   if (resultado) {
+    const aprobado = resultado.estado === "APROBADO" || resultado.estado === "PUBLICADO";
     return (
-      <div className={`rounded-xl p-5 border ${resultado.estado === "RECHAZADO" ? "bg-red-50 border-red-200" : "bg-green-50 border-green-200"}`}>
+      <div className={`rounded-xl p-5 border ${aprobado ? "bg-green-50 border-green-200" : "bg-amber-50 border-amber-200"}`}>
         <p className="font-medium">{resultado.mensaje}</p>
+        {resultado.enlace && (
+          <a href={resultado.enlace} className="inline-block mt-3 bg-brand-600 text-white px-4 py-2 rounded-lg text-sm font-medium">
+            Ver el plan corregido
+          </a>
+        )}
         {resultado.publicacion && (
           <ul className="text-sm mt-3 space-y-1">
             {resultado.publicacion.map((r) => (
@@ -448,17 +455,24 @@ export function AprobacionForm({ token }: { token: string }) {
 
   return (
     <div className="border rounded-xl bg-white p-5 space-y-3">
-      <div className="grid sm:grid-cols-2 gap-3">
-        <label className="block">
-          <span className="text-xs text-gray-500">Tu nombre</span>
-          <input value={nombre} onChange={(e) => setNombre(e.target.value)} className="mt-1 w-full border rounded px-2 py-1.5" />
-        </label>
-        <label className="block">
-          <span className="text-xs text-gray-500">Comentarios (obligatorio si rechazas)</span>
-          <input value={comentario} onChange={(e) => setComentario(e.target.value)} className="mt-1 w-full border rounded px-2 py-1.5" />
-        </label>
-      </div>
-      <div className="flex gap-3">
+      <label className="block">
+        <span className="text-xs text-gray-500">Tu nombre</span>
+        <input value={nombre} onChange={(e) => setNombre(e.target.value)} className="mt-1 w-full sm:w-80 border rounded px-2 py-1.5 block" />
+      </label>
+      <label className="block">
+        <span className="text-xs text-gray-500">
+          ¿Algo por corregir? Escríbelo aquí
+          {correccionAutomatica ? " — se corrige automáticamente y te llega el plan ajustado" : ""}
+        </span>
+        <textarea
+          value={comentario}
+          onChange={(e) => setComentario(e.target.value)}
+          rows={3}
+          placeholder='Ej.: "La entrega es noviembre de 2026. En la pieza 4 cambia la foto. Menos texto en Facebook."'
+          className="mt-1 w-full border rounded px-2 py-1.5"
+        />
+      </label>
+      <div className="flex gap-3 flex-wrap">
         <button
           onClick={() => decidir("aprobar")}
           disabled={cargando !== null}
@@ -467,14 +481,131 @@ export function AprobacionForm({ token }: { token: string }) {
           {cargando === "aprobar" ? "Aprobando y publicando…" : "Aprobar plan"}
         </button>
         <button
-          onClick={() => decidir("rechazar")}
+          onClick={() => decidir("corregir")}
           disabled={cargando !== null}
-          className="border border-red-300 text-red-700 px-5 py-2 rounded-lg font-medium hover:bg-red-50 disabled:opacity-60"
+          className="border border-amber-400 text-amber-800 px-5 py-2 rounded-lg font-medium hover:bg-amber-50 disabled:opacity-60"
         >
-          {cargando === "rechazar" ? "Enviando…" : "Rechazar"}
+          {cargando === "corregir"
+            ? correccionAutomatica
+              ? "Aplicando correcciones… (hasta 1 minuto)"
+              : "Enviando…"
+            : "Pedir correcciones"}
         </button>
       </div>
       {error && <p className="text-sm text-red-600">{error}</p>}
     </div>
+  );
+}
+
+export function CorregirPlanForm({
+  planId,
+  piezas,
+  disponible,
+  hayDestinatario,
+}: {
+  planId: string;
+  piezas: { id: string; orden: number; titular: string }[];
+  disponible: boolean;
+  hayDestinatario: boolean;
+}) {
+  const router = useRouter();
+  const [instrucciones, setInstrucciones] = useState("");
+  const [piezaId, setPiezaId] = useState("");
+  const [reenviar, setReenviar] = useState(true);
+  const [cargando, setCargando] = useState(false);
+  const [resultado, setResultado] = useState<{
+    resumen: string;
+    cambios: { orden: number; campos: string[]; motivo: string }[];
+    envio: { enlace: string; enviado: boolean; motivo?: string } | null;
+  } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function corregir(e: React.FormEvent) {
+    e.preventDefault();
+    setCargando(true);
+    setError(null);
+    setResultado(null);
+    try {
+      const r = await llamar(`/api/mercadeo/planes/${planId}/corregir`, "POST", {
+        instrucciones,
+        piezaId: piezaId || null,
+        reenviar: reenviar && hayDestinatario,
+      });
+      setResultado(r);
+      setInstrucciones("");
+      router.refresh();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setCargando(false);
+    }
+  }
+
+  return (
+    <form onSubmit={corregir} className="space-y-2">
+      <div className="text-sm font-medium">Corregir con IA</div>
+      {!disponible && (
+        <p className="text-xs text-amber-700">
+          Requiere activar Claude (ANTHROPIC_API_KEY en Vercel). Mientras tanto, usa “Editar pieza”.
+        </p>
+      )}
+      <div className="flex gap-2 flex-wrap">
+        <select
+          value={piezaId}
+          onChange={(e) => setPiezaId(e.target.value)}
+          className="border rounded px-2 py-1.5 text-sm"
+        >
+          <option value="">Todo el plan</option>
+          {piezas.map((p) => (
+            <option key={p.id} value={p.id}>
+              Pieza #{p.orden} — {p.titular.slice(0, 40)}
+            </option>
+          ))}
+        </select>
+      </div>
+      <textarea
+        value={instrucciones}
+        onChange={(e) => setInstrucciones(e.target.value)}
+        rows={3}
+        placeholder='Ej.: "La entrega es a partir de noviembre de 2026, no mayo. En la pieza 4 cambia la foto."'
+        className="w-full border rounded-lg px-3 py-2 text-sm"
+      />
+      <div className="flex items-center gap-3 flex-wrap">
+        <button
+          disabled={!disponible || cargando || instrucciones.trim().length < 3}
+          className="bg-brand-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-700 disabled:opacity-50"
+        >
+          {cargando ? "Aplicando correcciones…" : reenviar && hayDestinatario ? "Corregir y reenviar" : "Corregir"}
+        </button>
+        {hayDestinatario && (
+          <label className="flex items-center gap-2 text-sm text-gray-600">
+            <input type="checkbox" checked={reenviar} onChange={(e) => setReenviar(e.target.checked)} />
+            Reenviar el plan corregido para aprobación
+          </label>
+        )}
+      </div>
+      {error && <p className="text-sm text-red-600">{error}</p>}
+      {resultado && (
+        <div className="text-sm bg-green-50 border border-green-200 rounded-lg p-3 space-y-1">
+          <p className="font-medium">{resultado.resumen}</p>
+          {resultado.cambios.length === 0 ? (
+            <p className="text-gray-600">No hubo cambios en las piezas.</p>
+          ) : (
+            <ul className="list-disc pl-5 text-gray-700">
+              {resultado.cambios.map((c) => (
+                <li key={c.orden}>
+                  #{c.orden}: {c.campos.join(", ")} — {c.motivo}
+                </li>
+              ))}
+            </ul>
+          )}
+          {resultado.envio && (
+            <p className="text-gray-600">
+              {resultado.envio.enviado ? "Plan corregido reenviado por correo." : `No se envió el correo: ${resultado.envio.motivo}`}
+            </p>
+          )}
+        </div>
+      )}
+    </form>
   );
 }

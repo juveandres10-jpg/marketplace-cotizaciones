@@ -402,23 +402,73 @@ type NotaCorreccion = { nota?: string; imagenFondo?: string };
 const CorreccionesContext = createContext<{
   notas: Record<number, NotaCorreccion>;
   actualizar: (orden: number, cambio: NotaCorreccion) => void;
+  limpiar: (orden: number) => void;
+  nombre: string;
+  setNombre: (v: string) => void;
 } | null>(null);
 
-/** Guarda las correcciones que quien aprueba escribe pieza por pieza. */
+/** Guarda las correcciones que quien aprueba escribe pieza por pieza (y su nombre, para el registro). */
 export function CorreccionesProvider({ children }: { children: React.ReactNode }) {
   const [notas, setNotas] = useState<Record<number, NotaCorreccion>>({});
+  const [nombre, setNombre] = useState("");
   const actualizar = (orden: number, cambio: NotaCorreccion) =>
     setNotas((n) => ({ ...n, [orden]: { ...n[orden], ...cambio } }));
-  return <CorreccionesContext.Provider value={{ notas, actualizar }}>{children}</CorreccionesContext.Provider>;
+  const limpiar = (orden: number) =>
+    setNotas((n) => {
+      const { [orden]: _, ...resto } = n;
+      return resto;
+    });
+  return (
+    <CorreccionesContext.Provider value={{ notas, actualizar, limpiar, nombre, setNombre }}>{children}</CorreccionesContext.Provider>
+  );
 }
 
 /** Corrección de una pieza en la página de aprobación: nota para la IA y/o elegir otra foto. */
-export function NotaPieza({ orden, galeria, fotoActual }: { orden: number; galeria: string[]; fotoActual: string | null }) {
+export function NotaPieza({
+  token,
+  orden,
+  galeria,
+  fotoActual,
+}: {
+  token: string;
+  orden: number;
+  galeria: string[];
+  fotoActual: string | null;
+}) {
+  const router = useRouter();
   const ctx = useContext(CorreccionesContext);
   const [verFotos, setVerFotos] = useState(false);
+  const [corrigiendo, setCorrigiendo] = useState(false);
+  const [aviso, setAviso] = useState<{ ok: boolean; texto: string } | null>(null);
   if (!ctx) return null;
   const actual = ctx.notas[orden] ?? {};
   const elegida = actual.imagenFondo;
+  const hayCambios = Boolean(actual.nota?.trim()) || elegida !== undefined;
+
+  // Corrige solo esta pieza ya mismo; el plan sigue pendiente para revisar y aprobar al final.
+  async function corregirEsta() {
+    setAviso(null);
+    if (ctx!.nombre.trim().length < 2) {
+      return setAviso({ ok: false, texto: "Escribe tu nombre arriba (en \"Tu nombre\") para dejar registro de la corrección." });
+    }
+    setCorrigiendo(true);
+    try {
+      const r = await llamar(`/api/mercadeo/aprobacion/${token}/pieza`, "POST", {
+        orden,
+        nombre: ctx!.nombre,
+        nota: actual.nota?.trim() || undefined,
+        imagenFondo: elegida,
+      });
+      ctx!.limpiar(orden);
+      setVerFotos(false);
+      setAviso({ ok: true, texto: r.mensaje });
+      router.refresh();
+    } catch (e: any) {
+      setAviso({ ok: false, texto: e.message });
+    } finally {
+      setCorrigiendo(false);
+    }
+  }
   return (
     <div className="mt-3 border-t pt-3 space-y-2">
       <label className="block">
@@ -462,12 +512,29 @@ export function NotaPieza({ orden, galeria, fotoActual }: { orden: number; galer
           )}
         </div>
       )}
+      <div className="flex items-center gap-3 flex-wrap">
+        <button
+          type="button"
+          onClick={corregirEsta}
+          disabled={!hayCambios || corrigiendo}
+          className="bg-amber-500 text-white px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-amber-600 disabled:opacity-40"
+        >
+          {corrigiendo ? "Corrigiendo esta imagen…" : `Corregir la pieza #${orden}`}
+        </button>
+        {!hayCambios && !aviso && (
+          <span className="text-xs text-gray-400">Escribe la corrección o elige otra foto y corrige solo esta pieza.</span>
+        )}
+      </div>
+      {aviso && <p className={`text-xs ${aviso.ok ? "text-green-700" : "text-red-600"}`}>{aviso.ok ? "✓ " : ""}{aviso.texto}</p>}
     </div>
   );
 }
 
 export function AprobacionForm({ token, correccionAutomatica = false }: { token: string; correccionAutomatica?: boolean }) {
-  const [nombre, setNombre] = useState("");
+  const ctx = useContext(CorreccionesContext);
+  const [nombreLocal, setNombreLocal] = useState("");
+  const nombre = ctx ? ctx.nombre : nombreLocal;
+  const setNombre = ctx ? ctx.setNombre : setNombreLocal;
   const [comentario, setComentario] = useState("");
   const [cargando, setCargando] = useState<"aprobar" | "corregir" | null>(null);
   const [resultado, setResultado] = useState<{
@@ -478,7 +545,6 @@ export function AprobacionForm({ token, correccionAutomatica = false }: { token:
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const ctx = useContext(CorreccionesContext);
   const porPieza = Object.entries(ctx?.notas ?? {})
     .map(([orden, n]) => ({ orden: Number(orden), nota: n.nota?.trim() || undefined, imagenFondo: n.imagenFondo }))
     .filter((x) => x.nota || x.imagenFondo !== undefined);
@@ -572,7 +638,7 @@ export function AprobacionForm({ token, correccionAutomatica = false }: { token:
         </button>
       </div>
       <p className="text-xs text-gray-500">
-        También puedes escribir una corrección o cambiar la foto debajo de cada pieza, más abajo en esta página.
+        Para corregir una imagen por separado usa el botón "Corregir la pieza #n" debajo de cada pieza; con "Pedir correcciones" se envían todas juntas.
       </p>
       {error && <p className="text-sm text-red-600">{error}</p>}
     </div>

@@ -79,7 +79,7 @@ export default async function AprobacionPage({ params }: { params: { token: stri
         <div className="grid gap-3">
           {plan.piezas.map((p) => (
             <PiezaTarjeta key={p.id} pieza={p} moneda={plan.moneda}>
-              {pendiente && <NotaPieza orden={p.orden} galeria={galeria} fotoActual={fotoDe(p)} />}
+              {pendiente && <NotaPieza token={params.token} orden={p.orden} galeria={galeria} fotoActual={fotoDe(p)} />}
             </PiezaTarjeta>
           ))}
         </div>

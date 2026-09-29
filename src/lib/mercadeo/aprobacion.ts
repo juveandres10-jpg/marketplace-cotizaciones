@@ -122,3 +122,53 @@ export async function decidirPlan(params: {
           : "Plan aprobado y enviado a Meta. Los anuncios quedaron en pausa: actívalos en el Administrador de anuncios.",
   };
 }
+
+/**
+ * Corrige UNA pieza desde la página de aprobación sin decidir el plan: aplica
+ * la foto elegida y/o la nota con IA y deja el enlace vigente para seguir
+ * revisando y, al final, aprobar.
+ */
+export async function corregirPiezaPorToken(params: {
+  token: string;
+  orden: number;
+  nombre: string;
+  nota?: string;
+  imagenFondo?: string;
+}): Promise<{ mensaje: string }> {
+  const plan = await planPorToken(params.token);
+  if (!plan) throw new ErrorMercadeo("Enlace inválido o ya utilizado.", 404);
+  if (plan.estado !== "PENDIENTE_APROBACION") {
+    throw new ErrorMercadeo(`Este plan ya fue ${plan.estado.toLowerCase().replace("_", " ")}.`, 409);
+  }
+  if (plan.tokenExpira && plan.tokenExpira < new Date()) {
+    throw new ErrorMercadeo("El enlace venció. Pide que se reenvíe el plan.", 410);
+  }
+  const pieza = plan.piezas.find((p) => p.orden === params.orden);
+  if (!pieza) throw new ErrorMercadeo("Pieza no encontrada", 404);
+
+  const partes: string[] = [];
+  if (params.imagenFondo !== undefined) {
+    const galeria = [...plan.proyectoVenta.imagenes, ...(plan.proyectoVenta.imagenUrl ? [plan.proyectoVenta.imagenUrl] : [])];
+    if (params.imagenFondo !== "" && !galeria.includes(params.imagenFondo)) {
+      throw new ErrorMercadeo("Esa foto no está en la galería del proyecto.", 400);
+    }
+    await prisma.piezaPlan.update({ where: { id: pieza.id }, data: { imagenFondo: params.imagenFondo } });
+    partes.push(params.imagenFondo ? "Foto cambiada." : "Pieza sin foto.");
+  }
+
+  const nota = params.nota?.trim();
+  if (nota) {
+    if (!correccionAutomaticaDisponible()) {
+      throw new ErrorMercadeo(
+        `${partes.join(" ")} La corrección de textos con IA no está activada todavía (falta ANTHROPIC_API_KEY); usa "Pedir correcciones" para que el equipo la haga.`.trim(),
+        400
+      );
+    }
+    const instrucciones = `${nota}${params.imagenFondo !== undefined ? " (la foto ya la eligió quien aprueba: no la cambies)" : ""}`;
+    const correccion = await aplicarCorrecciones({ planId: plan.id, piezaId: pieza.id, instrucciones, autor: params.nombre });
+    partes.push(correccion.cambios.length ? correccion.resumen : "La IA revisó la pieza y no encontró nada que cambiar.");
+  }
+
+  if (partes.length === 0) throw new ErrorMercadeo("Escribe la corrección o elige otra foto para esta pieza.", 400);
+  return { mensaje: partes.join(" ") };
+}

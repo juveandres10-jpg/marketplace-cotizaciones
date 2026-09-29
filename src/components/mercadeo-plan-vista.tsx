@@ -197,6 +197,7 @@ export type PiezaVista = {
   hashtags: string | null;
   conceptoVisual: string;
   guionVideo: string | null;
+  videoUrl?: string | null;
   estadoMeta: string | null;
   errorMeta: string | null;
 };
@@ -222,6 +223,11 @@ export function PiezaTarjeta({ pieza, moneda, children }: { pieza: PiezaVista; m
             {pieza.plataforma === "INSTAGRAM" ? "Instagram" : "Facebook"}
           </span>
           <span className="px-2 py-0.5 rounded-full bg-gray-100">{pieza.formato.toLowerCase()}</span>
+          {pieza.videoUrl && (
+            <a href={pieza.videoUrl} target="_blank" rel="noreferrer" className="px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 hover:underline">
+              🎬 con video
+            </a>
+          )}
           {pieza.pagada ? (
             <span className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 font-medium">
               Pauta {dinero(pieza.presupuesto, moneda)} · {pieza.diasPauta} días · {pieza.objetivo.toLowerCase()}

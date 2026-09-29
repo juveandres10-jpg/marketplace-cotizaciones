@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { createContext, useContext, useState } from "react";
 import { useRouter } from "next/navigation";
 
 async function llamar(url: string, metodo: string, cuerpo?: unknown) {
@@ -398,6 +398,74 @@ export function EditorPieza({
   );
 }
 
+type NotaCorreccion = { nota?: string; imagenFondo?: string };
+const CorreccionesContext = createContext<{
+  notas: Record<number, NotaCorreccion>;
+  actualizar: (orden: number, cambio: NotaCorreccion) => void;
+} | null>(null);
+
+/** Guarda las correcciones que quien aprueba escribe pieza por pieza. */
+export function CorreccionesProvider({ children }: { children: React.ReactNode }) {
+  const [notas, setNotas] = useState<Record<number, NotaCorreccion>>({});
+  const actualizar = (orden: number, cambio: NotaCorreccion) =>
+    setNotas((n) => ({ ...n, [orden]: { ...n[orden], ...cambio } }));
+  return <CorreccionesContext.Provider value={{ notas, actualizar }}>{children}</CorreccionesContext.Provider>;
+}
+
+/** Corrección de una pieza en la página de aprobación: nota para la IA y/o elegir otra foto. */
+export function NotaPieza({ orden, galeria, fotoActual }: { orden: number; galeria: string[]; fotoActual: string | null }) {
+  const ctx = useContext(CorreccionesContext);
+  const [verFotos, setVerFotos] = useState(false);
+  if (!ctx) return null;
+  const actual = ctx.notas[orden] ?? {};
+  const elegida = actual.imagenFondo;
+  return (
+    <div className="mt-3 border-t pt-3 space-y-2">
+      <label className="block">
+        <span className="text-xs font-medium text-gray-600">Corrección para la pieza #{orden}</span>
+        <textarea
+          value={actual.nota ?? ""}
+          onChange={(e) => ctx.actualizar(orden, { nota: e.target.value })}
+          rows={2}
+          placeholder="Ej.: título más corto, resalta el subsidio, menos emojis…"
+          className="mt-1 w-full border rounded px-2 py-1.5 text-sm"
+        />
+      </label>
+      {galeria.length > 0 && (
+        <div>
+          <button type="button" onClick={() => setVerFotos(!verFotos)} className="text-xs text-brand-700 hover:underline">
+            {elegida !== undefined ? "✓ Foto cambiada — ver fotos" : verFotos ? "Ocultar fotos" : "Cambiar la foto de esta pieza"}
+          </button>
+          {verFotos && (
+            <div className="flex gap-2 overflow-x-auto pb-1 mt-2">
+              <button
+                type="button"
+                onClick={() => ctx.actualizar(orden, { imagenFondo: "" })}
+                className={`shrink-0 w-20 h-20 rounded border text-[10px] text-gray-500 ${elegida === "" ? "ring-2 ring-brand-600" : ""}`}
+              >
+                Sin foto
+              </button>
+              {galeria.map((url) => (
+                <button
+                  key={url}
+                  type="button"
+                  onClick={() => ctx.actualizar(orden, { imagenFondo: url })}
+                  className={`shrink-0 w-20 h-20 rounded overflow-hidden border ${
+                    (elegida ?? fotoActual) === url ? "ring-2 ring-brand-600" : ""
+                  }`}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={url} alt="" loading="lazy" className="w-full h-full object-cover" />
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function AprobacionForm({ token, correccionAutomatica = false }: { token: string; correccionAutomatica?: boolean }) {
   const [nombre, setNombre] = useState("");
   const [comentario, setComentario] = useState("");
@@ -410,10 +478,18 @@ export function AprobacionForm({ token, correccionAutomatica = false }: { token:
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const ctx = useContext(CorreccionesContext);
+  const porPieza = Object.entries(ctx?.notas ?? {})
+    .map(([orden, n]) => ({ orden: Number(orden), nota: n.nota?.trim() || undefined, imagenFondo: n.imagenFondo }))
+    .filter((x) => x.nota || x.imagenFondo !== undefined);
+
   async function decidir(decision: "aprobar" | "corregir") {
     setError(null);
     if (nombre.trim().length < 2) return setError("Escribe tu nombre para dejar registro de la decisión.");
-    if (decision === "corregir" && comentario.trim().length < 3) return setError("Escribe qué hay que corregir.");
+    if (decision === "corregir" && comentario.trim().length < 3 && porPieza.length === 0) {
+      return setError("Escribe qué hay que corregir (aquí o debajo de cada pieza).");
+    }
+    if (decision === "aprobar" && porPieza.length > 0 && !confirm("Escribiste correcciones en algunas piezas. ¿Aprobar de todas formas sin aplicarlas?")) return;
     if (decision === "aprobar" && !confirm("Al aprobar se programan las publicaciones y se crea la pauta en Meta. ¿Continuar?")) return;
     setCargando(decision);
     try {
@@ -421,6 +497,7 @@ export function AprobacionForm({ token, correccionAutomatica = false }: { token:
         decision,
         nombre,
         comentario: comentario || undefined,
+        porPieza: decision === "corregir" ? porPieza : undefined,
       });
       setResultado(r);
     } catch (e: any) {
@@ -489,9 +566,14 @@ export function AprobacionForm({ token, correccionAutomatica = false }: { token:
             ? correccionAutomatica
               ? "Aplicando correcciones… (hasta 1 minuto)"
               : "Enviando…"
-            : "Pedir correcciones"}
+            : porPieza.length
+              ? `Pedir correcciones (${porPieza.length} pieza${porPieza.length === 1 ? "" : "s"})`
+              : "Pedir correcciones"}
         </button>
       </div>
+      <p className="text-xs text-gray-500">
+        También puedes escribir una corrección o cambiar la foto debajo de cada pieza, más abajo en esta página.
+      </p>
       {error && <p className="text-sm text-red-600">{error}</p>}
     </div>
   );

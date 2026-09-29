@@ -1,5 +1,5 @@
 import { AnalisisVista, MarkdownSimple, PiezaTarjeta, dinero, ESTADO_PLAN_LABEL } from "@/components/mercadeo-plan-vista";
-import { AprobacionForm } from "@/components/mercadeo-acciones";
+import { AprobacionForm, CorreccionesProvider, NotaPieza } from "@/components/mercadeo-acciones";
 import { planPorToken } from "@/lib/mercadeo/servicio";
 import { estadoConfiguracionMeta } from "@/lib/mercadeo/meta";
 import { correccionAutomaticaDisponible } from "@/lib/mercadeo/correcciones";
@@ -31,7 +31,13 @@ export default async function AprobacionPage({ params }: { params: { token: stri
   const pagadas = plan.piezas.filter((p) => p.pagada);
   const meta = estadoConfiguracionMeta();
 
+  const pendiente = plan.estado === "PENDIENTE_APROBACION" && !vencido;
+  const galeria = [...plan.proyectoVenta.imagenes, ...(plan.proyectoVenta.imagenUrl ? [plan.proyectoVenta.imagenUrl] : [])];
+  const fotoDe = (p: (typeof plan.piezas)[number]) =>
+    p.imagenFondo === "" ? null : p.imagenFondo || (galeria.length ? galeria[(p.orden - 1) % galeria.length] : null);
+
   return (
+    <CorreccionesProvider>
     <main className="min-h-screen">
       <div className="max-w-5xl mx-auto px-6 py-8">
         <div className="text-xs text-gray-500 uppercase tracking-wide">Aprobación de plan de mercadeo</div>
@@ -72,10 +78,13 @@ export default async function AprobacionPage({ params }: { params: { token: stri
         <h2 className="font-semibold text-lg mb-3">Calendario y piezas</h2>
         <div className="grid gap-3">
           {plan.piezas.map((p) => (
-            <PiezaTarjeta key={p.id} pieza={p} moneda={plan.moneda} />
+            <PiezaTarjeta key={p.id} pieza={p} moneda={plan.moneda}>
+              {pendiente && <NotaPieza orden={p.orden} galeria={galeria} fotoActual={fotoDe(p)} />}
+            </PiezaTarjeta>
           ))}
         </div>
       </div>
     </main>
+    </CorreccionesProvider>
   );
 }

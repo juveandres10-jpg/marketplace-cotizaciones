@@ -11,6 +11,8 @@ export async function decidirPlan(params: {
   decision: "aprobar" | "rechazar" | "corregir";
   nombre: string;
   comentario?: string;
+  /** Correcciones puntuales por pieza: nota para la IA y/o foto elegida de la galería ("" = sin foto). */
+  porPieza?: { orden: number; nota?: string; imagenFondo?: string }[];
 }): Promise<{ estado: string; publicacion: ResultadoPublicacion[] | null; mensaje: string; enlace?: string }> {
   const plan = await planPorToken(params.token);
   if (!plan) throw new ErrorMercadeo("Enlace inválido o ya utilizado.", 404);
@@ -35,23 +37,48 @@ export async function decidirPlan(params: {
   });
   if (actualizado.count === 0) throw new ErrorMercadeo("Este plan ya fue decidido.", 409);
 
-  if (!aprobado && params.decision === "corregir" && params.comentario && correccionAutomaticaDisponible()) {
-    // Se aplican las correcciones con IA y se reenvía el plan corregido a los mismos destinatarios.
-    let correccion;
-    try {
-      correccion = await aplicarCorrecciones({
-        planId: plan.id,
-        instrucciones: params.comentario,
-        autor: params.nombre,
-      });
-    } catch (error) {
-      console.error("[mercadeo] No se pudo aplicar la corrección automática:", error);
-      return {
-        estado: "RECHAZADO",
-        publicacion: null,
-        mensaje: "Recibimos tus correcciones, pero no se pudieron aplicar automáticamente. El equipo las hará y te reenviará el plan.",
-      };
+  if (params.decision === "corregir") {
+    // 1) Fotos elegidas por quien aprueba: se aplican directo (no necesitan IA).
+    const galeria = [...plan.proyectoVenta.imagenes, ...(plan.proyectoVenta.imagenUrl ? [plan.proyectoVenta.imagenUrl] : [])];
+    const fotosElegidas = new Set<number>();
+    for (const x of params.porPieza ?? []) {
+      if (x.imagenFondo === undefined) continue;
+      if (x.imagenFondo !== "" && !galeria.includes(x.imagenFondo)) continue;
+      const pieza = plan.piezas.find((p) => p.orden === x.orden);
+      if (!pieza) continue;
+      await prisma.piezaPlan.update({ where: { id: pieza.id }, data: { imagenFondo: x.imagenFondo } });
+      fotosElegidas.add(x.orden);
     }
+
+    // 2) Notas en texto (generales y por pieza) -> IA.
+    const notas = (params.porPieza ?? [])
+      .filter((x) => x.nota?.trim())
+      .map((x) => `Pieza #${x.orden}: ${x.nota!.trim()}${fotosElegidas.has(x.orden) ? " (la foto ya la eligió quien aprueba: no la cambies)" : ""}`);
+    const instrucciones = [params.comentario?.trim(), ...notas].filter(Boolean).join("\n");
+
+    let resumen = fotosElegidas.size ? `Fotos cambiadas en ${fotosElegidas.size} pieza(s).` : "";
+    if (instrucciones) {
+      if (!correccionAutomaticaDisponible()) {
+        return {
+          estado: "RECHAZADO",
+          publicacion: null,
+          mensaje: `${resumen} Correcciones recibidas: el equipo ajustará los textos y te reenviará el plan.`.trim(),
+        };
+      }
+      try {
+        const correccion = await aplicarCorrecciones({ planId: plan.id, instrucciones, autor: params.nombre });
+        resumen = `${resumen} ${correccion.resumen}`.trim();
+      } catch (error) {
+        console.error("[mercadeo] No se pudo aplicar la corrección automática:", error);
+        return {
+          estado: "RECHAZADO",
+          publicacion: null,
+          mensaje: `${resumen} Recibimos tus correcciones, pero no se pudieron aplicar automáticamente. El equipo las hará y te reenviará el plan.`.trim(),
+        };
+      }
+    }
+
+    // 3) Se reenvía el plan corregido a los mismos destinatarios.
     const destinatarios = (plan.enviadoA ?? "").split(",").map((s) => s.trim()).filter(Boolean);
     const envio = await enviarAprobacion({ empresaId: plan.empresaId, planId: plan.id, destinatarios });
     return {
@@ -59,7 +86,7 @@ export async function decidirPlan(params: {
       publicacion: null,
       enlace: envio.enlace,
       mensaje:
-        `Correcciones aplicadas: ${correccion.resumen} ` +
+        `Correcciones aplicadas: ${resumen} ` +
         (envio.enviado ? "Te enviamos el plan corregido por correo." : "Revisa el plan corregido en el enlace de abajo."),
     };
   }
@@ -68,10 +95,7 @@ export async function decidirPlan(params: {
     return {
       estado: "RECHAZADO",
       publicacion: null,
-      mensaje:
-        params.decision === "corregir"
-          ? "Correcciones recibidas. El equipo ajustará el plan y te lo reenviará."
-          : "Plan rechazado. El equipo recibirá tus comentarios.",
+      mensaje: "Plan rechazado. El equipo recibirá tus comentarios.",
     };
   }
 

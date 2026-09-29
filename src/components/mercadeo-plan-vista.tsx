@@ -208,7 +208,7 @@ export function PiezaTarjeta({ pieza, moneda, children }: { pieza: PiezaVista; m
   // Cambia cuando se edita la pieza, para no mostrar una imagen vieja en caché.
   const version = pieza.updatedAt ? new Date(pieza.updatedAt).getTime() : 0;
   return (
-    <div className="border rounded-xl bg-white p-4 flex gap-4 flex-col sm:flex-row">
+    <div id={`pieza-${pieza.orden}`} className="border rounded-xl bg-white p-4 flex gap-4 flex-col sm:flex-row scroll-mt-4">
       <a href={`/api/mercadeo/piezas/${pieza.id}/imagen?v=${version}`} target="_blank" rel="noreferrer" className="shrink-0">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
@@ -247,7 +247,12 @@ export function PiezaTarjeta({ pieza, moneda, children }: { pieza: PiezaVista; m
             </span>
           )}
         </div>
-        <div className="text-xs text-gray-400 mt-1">Tema: {pieza.tema}</div>
+        <div className="text-xs text-gray-400 mt-1">
+          Tema: {pieza.tema} ·{" "}
+          <a href={`/api/mercadeo/piezas/${pieza.id}/imagen?v=${version}`} target="_blank" rel="noreferrer" className="text-brand-700 hover:underline">
+            Abrir imagen en grande
+          </a>
+        </div>
         <div className="font-semibold mt-2">{pieza.titular}</div>
         <p className="text-sm text-gray-700 whitespace-pre-wrap mt-1">{pieza.copy}</p>
         {pieza.hashtags && <p className="text-xs text-brand-700 mt-1">{pieza.hashtags}</p>}

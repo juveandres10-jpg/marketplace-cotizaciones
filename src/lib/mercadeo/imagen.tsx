@@ -11,6 +11,7 @@ import { ImageResponse } from "next/og";
 import { readFile } from "fs/promises";
 import path from "path";
 import { formatoMoneda } from "./estrategia";
+import { prisma } from "@/lib/prisma";
 
 type PiezaImagen = {
   orden?: number;
@@ -39,9 +40,46 @@ type ProyectoImagen = {
   imagenes?: string[];
 };
 
-const COLOR_PRIMARIO = process.env.MERCADEO_COLOR_PRIMARIO || "#1e3a8a";
-const COLOR_OSCURO = process.env.MERCADEO_COLOR_OSCURO || "#0f172a";
-const COLOR_ACENTO = process.env.MERCADEO_COLOR_ACENTO || "#f59e0b";
+export type Marca = {
+  logoUrl?: string | null;
+  colorPrimario?: string | null;
+  colorOscuro?: string | null;
+  colorAcento?: string | null;
+};
+
+type Paleta = { primario: string; oscuro: string; acento: string; suave: string; textoAcento: string };
+
+const HEX = /^#[0-9a-f]{6}$/i;
+
+function mezclar(hex: string, con: string, peso: number) {
+  const a = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  const b = [1, 3, 5].map((i) => parseInt(con.slice(i, i + 2), 16));
+  return `#${a.map((v, i) => Math.round(v * (1 - peso) + b[i] * peso).toString(16).padStart(2, "0")).join("")}`;
+}
+
+function luminancia(hex: string) {
+  const [r, g, b] = [1, 3, 5].map((i) => {
+    const c = parseInt(hex.slice(i, i + 2), 16) / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+/** Colores de la pieza: los del kit de marca de la empresa, o los de respaldo. */
+export function paletaDe(marca?: Marca | null): Paleta {
+  const color = (valor: string | null | undefined, env: string | undefined, defecto: string) =>
+    [valor, env, defecto].find((x) => x && HEX.test(x)) as string;
+  const primario = color(marca?.colorPrimario, process.env.MERCADEO_COLOR_PRIMARIO, "#1e3a8a");
+  const oscuro = color(marca?.colorOscuro, process.env.MERCADEO_COLOR_OSCURO, "#0f172a");
+  const acento = color(marca?.colorAcento, process.env.MERCADEO_COLOR_ACENTO, "#f59e0b");
+  return {
+    primario,
+    oscuro,
+    acento,
+    suave: mezclar(primario, "#ffffff", 0.9), // fondo de las etiquetas
+    textoAcento: luminancia(acento) > 0.35 ? oscuro : "#ffffff", // legible sobre el botón
+  };
+}
 
 /** Imagen de la pieza: la elegida en el editor o, si no, rota por la galería del proyecto. */
 export function fondoPieza(pieza: PiezaImagen, p: ProyectoImagen): string | null {
@@ -174,7 +212,7 @@ export function beneficiosPieza(tema: string | undefined, p: ProyectoImagen): st
 // Diseño
 // ------------------------------------------------------------------
 
-function Foto({ foto, ancho, alto }: { foto: FotoCargada | null; ancho: number; alto: number }) {
+function Foto({ foto, ancho, alto, c }: { foto: FotoCargada | null; ancho: number; alto: number; c: Paleta }) {
   if (!foto) {
     return (
       <div
@@ -182,7 +220,7 @@ function Foto({ foto, ancho, alto }: { foto: FotoCargada | null; ancho: number; 
           width: ancho,
           height: alto,
           display: "flex",
-          background: `linear-gradient(135deg, ${COLOR_PRIMARIO} 0%, ${COLOR_OSCURO} 100%)`,
+          background: `linear-gradient(135deg, ${c.primario} 0%, ${c.oscuro} 100%)`,
         }}
       />
     );
@@ -201,7 +239,7 @@ function Foto({ foto, ancho, alto }: { foto: FotoCargada | null; ancho: number; 
   const w = Math.round(foto.w * escala);
   const h = Math.round(foto.h * escala);
   return (
-    <div style={{ width: ancho, height: alto, display: "flex", position: "relative", overflow: "hidden", background: COLOR_OSCURO }}>
+    <div style={{ width: ancho, height: alto, display: "flex", position: "relative", overflow: "hidden", background: c.oscuro }}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={foto.src}
@@ -223,7 +261,14 @@ function Foto({ foto, ancho, alto }: { foto: FotoCargada | null; ancho: number; 
 
 type Fuente = Awaited<ReturnType<typeof fuentes>>[number];
 
-function render(pieza: PiezaImagen, p: ProyectoImagen, foto: FotoCargada | null, fuentesCargadas: Fuente[]) {
+function render(
+  pieza: PiezaImagen,
+  p: ProyectoImagen,
+  foto: FotoCargada | null,
+  fuentesCargadas: Fuente[],
+  c: Paleta,
+  logo: FotoCargada | null
+) {
   const conFuentes = fuentesCargadas.length > 0;
   const { width, height } = dimensionesPieza(pieza.formato);
   const vertical = height === 1920; // reels e historias (9:16); el feed es 4:5
@@ -249,17 +294,23 @@ function render(pieza: PiezaImagen, p: ProyectoImagen, foto: FotoCargada | null,
               display: "flex",
               alignItems: "flex-end",
               padding: `0 ${padX}px 36px`,
-              background: COLOR_OSCURO,
+              background: c.oscuro,
               color: "#ffffff",
               fontSize: 34,
               fontWeight: 700,
               letterSpacing: 4,
             }}
           >
+            {logo && (
+              <div style={{ display: "flex", background: "#ffffff", borderRadius: 16, padding: "10px 16px", marginRight: 28 }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={logo.src} width={Math.round((80 * logo.w) / logo.h)} height={80} style={{ maxWidth: 360, objectFit: "contain" }} />
+              </div>
+            )}
             {p.nombre.toUpperCase()}
           </div>
         )}
-        <Foto foto={foto} ancho={width} alto={altoFoto} />
+        <Foto foto={foto} ancho={width} alto={altoFoto} c={c} />
         <div
           style={{
             flex: 1,
@@ -268,12 +319,23 @@ function render(pieza: PiezaImagen, p: ProyectoImagen, foto: FotoCargada | null,
             justifyContent: "space-between",
             padding: vertical ? `56px ${padX}px 240px` : `44px ${padX}px 48px`,
             background: "#ffffff",
-            color: COLOR_OSCURO,
+            color: c.oscuro,
           }}
         >
           <div style={{ display: "flex", flexDirection: "column" }}>
-            <div style={{ display: "flex", fontSize: 26, fontWeight: 700, letterSpacing: 3, color: COLOR_PRIMARIO }}>
-              {(vertical ? ubicacion : `${p.nombre} · ${ubicacion}`).toUpperCase()}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div style={{ display: "flex", fontSize: 26, fontWeight: 700, letterSpacing: 3, color: c.primario }}>
+                {(vertical ? ubicacion : `${p.nombre} · ${ubicacion}`).toUpperCase()}
+              </div>
+              {logo && !vertical && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={logo.src}
+                  width={Math.min(260, Math.round((64 * logo.w) / logo.h))}
+                  height={64}
+                  style={{ objectFit: "contain" }}
+                />
+              )}
             </div>
             <div style={{ display: "flex", fontSize: tamTitular, fontWeight: 800, lineHeight: 1.08, marginTop: 14 }}>
               {titular}
@@ -291,8 +353,8 @@ function render(pieza: PiezaImagen, p: ProyectoImagen, foto: FotoCargada | null,
                       marginRight: 14,
                       marginBottom: 12,
                       borderRadius: 999,
-                      background: "#eef2ff",
-                      color: COLOR_PRIMARIO,
+                      background: c.suave,
+                      color: c.primario,
                     }}
                   >
                     {b}
@@ -306,7 +368,7 @@ function render(pieza: PiezaImagen, p: ProyectoImagen, foto: FotoCargada | null,
             {precio ? (
               <div style={{ display: "flex", flexDirection: "column" }}>
                 <div style={{ display: "flex", fontSize: 26, fontWeight: 500, color: "#64748b" }}>Desde</div>
-                <div style={{ display: "flex", fontSize: 58, fontWeight: 800, color: COLOR_OSCURO, lineHeight: 1 }}>{precio}</div>
+                <div style={{ display: "flex", fontSize: 58, fontWeight: 800, color: c.oscuro, lineHeight: 1 }}>{precio}</div>
               </div>
             ) : (
               <div style={{ display: "flex" }} />
@@ -315,8 +377,8 @@ function render(pieza: PiezaImagen, p: ProyectoImagen, foto: FotoCargada | null,
               <div
                 style={{
                   display: "flex",
-                  background: COLOR_ACENTO,
-                  color: COLOR_OSCURO,
+                  background: c.acento,
+                  color: c.textoAcento,
                   borderRadius: 999,
                   padding: "18px 34px",
                   fontSize: 28,
@@ -339,15 +401,36 @@ function render(pieza: PiezaImagen, p: ProyectoImagen, foto: FotoCargada | null,
   );
 }
 
-/** Devuelve el PNG de la pieza. Si la foto no carga, usa un fondo de marca. */
-export async function generarImagenPieza(pieza: PiezaImagen, proyecto: ProyectoImagen): Promise<Buffer> {
+async function marcaDeEmpresa(empresaId: string | undefined): Promise<Marca | null> {
+  if (!empresaId) return null;
+  return prisma.empresa
+    .findUnique({ where: { id: empresaId }, select: { logoUrl: true, colorPrimario: true, colorOscuro: true, colorAcento: true } })
+    .catch(() => null);
+}
+
+/**
+ * Devuelve el PNG de la pieza. Usa el kit de marca de la empresa del proyecto
+ * (o el `marca` recibido, p. ej. para la vista previa). Si la foto no carga, usa
+ * un fondo de marca.
+ */
+export async function generarImagenPieza(
+  pieza: PiezaImagen,
+  proyecto: ProyectoImagen & { empresaId?: string },
+  marca?: Marca | null
+): Promise<Buffer> {
   const url = fondoPieza(pieza, proyecto);
-  const [foto, fuentesCargadas] = await Promise.all([url ? cargarFoto(url) : null, fuentes()]);
+  const m = marca !== undefined ? marca : await marcaDeEmpresa(proyecto.empresaId);
+  const [foto, logo, fuentesCargadas] = await Promise.all([
+    url ? cargarFoto(url) : null,
+    m?.logoUrl ? cargarFoto(m.logoUrl) : null,
+    fuentes(),
+  ]);
+  const c = paletaDe(m);
   try {
-    return Buffer.from(await render(pieza, proyecto, foto, fuentesCargadas).arrayBuffer());
+    return Buffer.from(await render(pieza, proyecto, foto, fuentesCargadas, c, logo).arrayBuffer());
   } catch (error) {
     // Una imagen corrupta no debe impedir publicar: se usa el fondo de marca.
     console.warn("[mercadeo] Error dibujando la pieza con foto, se usa fondo de marca:", error);
-    return Buffer.from(await render(pieza, proyecto, null, fuentesCargadas).arrayBuffer());
+    return Buffer.from(await render(pieza, proyecto, null, fuentesCargadas, c, null).arrayBuffer());
   }
 }

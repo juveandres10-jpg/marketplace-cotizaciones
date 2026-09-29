@@ -42,6 +42,10 @@ piezas (imagen + copy + guion de video), lo envía por correo para aprobación y
    reel/video/historia; esas piezas se publican como Reel en Instagram, video
    en la Página de Facebook, y los anuncios usan el video (con la imagen de la
    pieza como miniatura). Sin videos, esas piezas usan la imagen.
+   **Kit de marca** (`/mercadeo/marca`): logo de la empresa y colores
+   principal / oscuro / acento (con sugerencia automática a partir del logo y
+   vista previa en vivo). Se guardan en `Empresa` y se aplican a todas las
+   piezas, incluso las de planes ya generados.
 6. **Piezas gráficas** (`imagen.tsx`): PNG 1080×1350 (feed 4:5) o 1080×1920
    (reel/historia) con el render del proyecto de fondo, titular, precio desde,
    CTA y contacto. `GET /api/mercadeo/piezas/[id]/imagen`.

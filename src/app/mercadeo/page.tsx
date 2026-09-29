@@ -52,6 +52,9 @@ export default async function MercadeoPage() {
             </p>
           </div>
           <div className="flex gap-2 items-start">
+            <Link href="/mercadeo/marca" className="border px-4 py-2 rounded-lg font-medium hover:bg-gray-50 text-sm">
+              Kit de marca
+            </Link>
             <Link href="/mercadeo/metricas" className="border px-4 py-2 rounded-lg font-medium hover:bg-gray-50 text-sm">
               Cargar métricas
             </Link>

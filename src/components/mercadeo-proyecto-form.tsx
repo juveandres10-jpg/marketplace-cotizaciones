@@ -28,6 +28,10 @@ export type ProyectoVentaInicial = {
 
 const s = (v: unknown) => (v == null ? "" : String(v));
 const num = (v: string) => (v.trim() === "" ? null : Number(v));
+/** Decimal escrito con coma o punto: "70,65" o "70.65" -> 70.65 */
+const decimal = (v: string) => (v.trim() === "" ? null : Number(v.trim().replace(/\s/g, "").replace(",", ".")));
+/** Valor en pesos escrito con separadores: "190.000.000" -> 190000000 */
+const pesos = (v: string) => (v.replace(/[^\d]/g, "") === "" ? null : Number(v.replace(/[^\d]/g, "")));
 
 export function ProyectoVentaForm({ inicial }: { inicial?: ProyectoVentaInicial }) {
   const router = useRouter();
@@ -66,9 +70,9 @@ export function ProyectoVentaForm({ inicial }: { inicial?: ProyectoVentaInicial 
       ...f,
       latitud: num(f.latitud),
       longitud: num(f.longitud),
-      precioDesde: num(f.precioDesde),
-      areaDesde: num(f.areaDesde),
-      presupuestoSemanal: num(f.presupuestoSemanal),
+      precioDesde: pesos(f.precioDesde),
+      areaDesde: decimal(f.areaDesde),
+      presupuestoSemanal: pesos(f.presupuestoSemanal),
     };
     try {
       const res = await fetch(inicial?.id ? `/api/mercadeo/proyectos/${inicial.id}` : "/api/mercadeo/proyectos", {
@@ -133,7 +137,7 @@ export function ProyectoVentaForm({ inicial }: { inicial?: ProyectoVentaInicial 
         </h2>
         <label className="block">
           <span className={etiqueta}>Precio desde</span>
-          <input type="number" step="any" min={0} value={f.precioDesde} onChange={set("precioDesde")} className={campo} />
+          <input inputMode="numeric" value={f.precioDesde} onChange={set("precioDesde")} className={campo} placeholder="190.000.000" />
         </label>
         <label className="block">
           <span className={etiqueta}>Moneda</span>
@@ -144,7 +148,10 @@ export function ProyectoVentaForm({ inicial }: { inicial?: ProyectoVentaInicial 
         </label>
         <label className="block">
           <span className={etiqueta}>Área desde (m²)</span>
-          <input type="number" step="any" min={0} value={f.areaDesde} onChange={set("areaDesde")} className={campo} />
+          <input inputMode="decimal" value={f.areaDesde} onChange={set("areaDesde")} className={campo} placeholder="70,65" />
+          {(decimal(f.areaDesde) ?? 0) >= 1000 && (
+            <span className="text-xs text-amber-700">¿Seguro? {f.areaDesde} m² es muy grande para una vivienda; si es 70,65 escríbelo con coma.</span>
+          )}
         </label>
         <label className="block">
           <span className={etiqueta}>Habitaciones</span>
@@ -180,7 +187,7 @@ export function ProyectoVentaForm({ inicial }: { inicial?: ProyectoVentaInicial 
         </label>
         <label className="block">
           <span className={etiqueta}>Presupuesto de pauta semanal sugerido ({f.moneda})</span>
-          <input type="number" min={0} step="any" value={f.presupuestoSemanal} onChange={set("presupuestoSemanal")} className={campo} />
+          <input inputMode="numeric" value={f.presupuestoSemanal} onChange={set("presupuestoSemanal")} className={campo} placeholder="300.000" />
         </label>
         {inicial?.id && (
           <label className="flex items-center gap-2 text-sm">

@@ -1,9 +1,15 @@
-// Generación de la pieza gráfica (PNG) de cada publicación a partir de los
-// datos del proyecto: titular, precio desde, ubicación, CTA y contacto sobre
-// el render del proyecto (si se cargó `imagenUrl`) o un fondo de marca.
-// Se usa tanto para previsualizar/descargar como para subirla a Meta.
+// Generación de la pieza gráfica (PNG) de cada publicación.
+//
+// Diseño: la foto/render del proyecto ocupa la parte superior SIN texto
+// encima (así no se mezcla con textos que ya traiga la imagen) y la
+// información va en una franja inferior limpia: ubicación, titular corto,
+// 2-3 beneficios concretos del proyecto, precio y llamada a la acción.
+// Formatos: 1080x1350 (4:5, feed de Instagram/Facebook) y 1080x1920 (9:16,
+// reels e historias). Se usa para previsualizar, descargar y subir a Meta.
 
 import { ImageResponse } from "next/og";
+import { readFile } from "fs/promises";
+import path from "path";
 import { formatoMoneda } from "./estrategia";
 
 type PiezaImagen = {
@@ -12,6 +18,8 @@ type PiezaImagen = {
   titular: string;
   cta: string;
   plataforma: string;
+  tema?: string;
+  imagenFondo?: string | null;
 };
 
 type ProyectoImagen = {
@@ -21,159 +29,325 @@ type ProyectoImagen = {
   zona: string | null;
   precioDesde: number | null;
   moneda: string;
+  areaDesde?: number | null;
+  habitaciones?: string | null;
+  amenidades?: string | null;
+  diferenciales?: string | null;
   whatsapp: string | null;
   urlLanding: string | null;
   imagenUrl: string | null;
   imagenes?: string[];
 };
 
-/** Fondo de la pieza: rota por la galería del proyecto (una imagen distinta por pieza). */
+const COLOR_PRIMARIO = process.env.MERCADEO_COLOR_PRIMARIO || "#1e3a8a";
+const COLOR_OSCURO = process.env.MERCADEO_COLOR_OSCURO || "#0f172a";
+const COLOR_ACENTO = process.env.MERCADEO_COLOR_ACENTO || "#f59e0b";
+
+/** Imagen de la pieza: la elegida en el editor o, si no, rota por la galería del proyecto. */
 export function fondoPieza(pieza: PiezaImagen, p: ProyectoImagen): string | null {
+  if (pieza.imagenFondo === "") return null; // "sin foto" elegido en el editor
+  if (pieza.imagenFondo) return pieza.imagenFondo;
   const galeria = [...(p.imagenes ?? []), ...(p.imagenUrl ? [p.imagenUrl] : [])];
   if (galeria.length === 0) return null;
   return galeria[Math.max(0, (pieza.orden ?? 1) - 1) % galeria.length];
 }
 
-const COLOR_PRIMARIO = process.env.MERCADEO_COLOR_PRIMARIO || "#1e40af";
-const COLOR_OSCURO = process.env.MERCADEO_COLOR_OSCURO || "#0f172a";
-const COLOR_ACENTO = process.env.MERCADEO_COLOR_ACENTO || "#f59e0b";
-
 export function dimensionesPieza(formato: string) {
-  // Reels e historias son verticales 9:16; el resto, cuadrado 1:1 (feed).
   return formato === "REEL" || formato === "HISTORIA"
     ? { width: 1080, height: 1920 }
-    : { width: 1080, height: 1080 };
+    : { width: 1080, height: 1350 };
 }
 
-function render(pieza: PiezaImagen, p: ProyectoImagen, fondo: string | null) {
-  const conFoto = Boolean(fondo);
+// ------------------------------------------------------------------
+// Utilidades
+// ------------------------------------------------------------------
+
+let fuentesCache: Promise<{ name: string; data: ArrayBuffer; weight: 500 | 700 | 800; style: "normal" }[]> | null = null;
+function fuentes() {
+  if (!fuentesCache) {
+    const dir = path.join(process.cwd(), "src/lib/mercadeo/fuentes");
+    fuentesCache = Promise.all(
+      ([500, 700, 800] as const).map(async (weight) => {
+        const buf = await readFile(path.join(dir, `montserrat-latin-${weight}-normal.woff`));
+        return {
+          name: "Montserrat",
+          data: buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer,
+          weight,
+          style: "normal" as const,
+        };
+      })
+    ).catch((error) => {
+      console.warn("[mercadeo] No se pudieron cargar las fuentes, se usa la de sistema:", error);
+      fuentesCache = null;
+      return [];
+    });
+  }
+  return fuentesCache;
+}
+
+/** Tamaño en píxeles de un JPG/PNG/WEBP leyendo su cabecera. */
+function tamanoImagen(b: Buffer): { w: number; h: number; tipo: string } | null {
+  if (b.length > 24 && b.readUInt32BE(0) === 0x89504e47) return { w: b.readUInt32BE(16), h: b.readUInt32BE(20), tipo: "image/png" };
+  if (b.length > 30 && b.toString("ascii", 0, 4) === "RIFF" && b.toString("ascii", 8, 12) === "WEBP") {
+    const chunk = b.toString("ascii", 12, 16);
+    if (chunk === "VP8X") return { w: 1 + b.readUIntLE(24, 3), h: 1 + b.readUIntLE(27, 3), tipo: "image/webp" };
+    if (chunk === "VP8L") {
+      const bits = b.readUInt32LE(21);
+      return { w: (bits & 0x3fff) + 1, h: ((bits >> 14) & 0x3fff) + 1, tipo: "image/webp" };
+    }
+    if (chunk === "VP8 ") return { w: b.readUInt16LE(26) & 0x3fff, h: b.readUInt16LE(28) & 0x3fff, tipo: "image/webp" };
+  }
+  if (b.length > 4 && b[0] === 0xff && b[1] === 0xd8) {
+    let i = 2;
+    while (i + 9 < b.length) {
+      if (b[i] !== 0xff) {
+        i++;
+        continue;
+      }
+      const marcador = b[i + 1];
+      const largo = b.readUInt16BE(i + 2);
+      if (marcador >= 0xc0 && marcador <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marcador)) {
+        return { h: b.readUInt16BE(i + 5), w: b.readUInt16BE(i + 7), tipo: "image/jpeg" };
+      }
+      i += 2 + largo;
+    }
+  }
+  return null;
+}
+
+type FotoCargada = { src: string; w: number; h: number };
+
+async function cargarFoto(url: string): Promise<FotoCargada | null> {
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(10_000), cache: "no-store" });
+    if (!res.ok) return null;
+    const buf = Buffer.from(await res.arrayBuffer());
+    const t = tamanoImagen(buf);
+    if (!t || !t.w || !t.h) return null;
+    return { src: `data:${t.tipo};base64,${buf.toString("base64")}`, w: t.w, h: t.h };
+  } catch {
+    return null;
+  }
+}
+
+function telefonoLegible(numero: string) {
+  const d = numero.replace(/\D/g, "");
+  if (d.startsWith("57") && d.length === 12) return `+57 ${d.slice(2, 5)} ${d.slice(5, 8)} ${d.slice(8)}`;
+  return `+${d}`;
+}
+
+function recortar(texto: string, max: number) {
+  if (texto.length <= max) return texto;
+  const corte = texto.slice(0, max).replace(/\s+\S*$/, "");
+  return `${corte}…`;
+}
+
+/** 2-3 beneficios cortos y concretos del proyecto, elegidos según el tema de la pieza. */
+export function beneficiosPieza(tema: string | undefined, p: ProyectoImagen): string[] {
+  const t = (tema ?? "").toLowerCase();
+  const habitaciones = (p.habitaciones ?? "")
+    .split(/[,;]| y /)
+    .map((s) => s.trim())
+    .filter((s) => s && s.length <= 24);
+  const area = p.areaDesde ? [`${p.areaDesde.toLocaleString("es-CO")} m²`] : [];
+  const diferenciales = (p.diferenciales ?? "")
+    .split(/[.;\n]/)
+    .map((s) => s.trim().replace(/^aplica\s+/i, ""))
+    .filter((s) => s && s.length <= 34)
+    .map((s) => s.charAt(0).toUpperCase() + s.slice(1));
+  const amenidades = (p.amenidades ?? "")
+    .split(/[,;]| y /)
+    .map((s) => s.trim())
+    .filter((s) => s && s.length <= 24)
+    .map((s) => s.charAt(0).toUpperCase() + s.slice(1));
+
+  let orden: string[];
+  if (t.includes("precio") || t.includes("pago")) orden = [...diferenciales, ...area, ...habitaciones];
+  else if (t.includes("amenidad")) orden = [...amenidades, ...area, ...diferenciales];
+  else if (t.includes("espacio") || t.includes("estilo")) orden = [...habitaciones, ...area, ...amenidades];
+  else if (t.includes("avance") || t.includes("sala de ventas")) orden = [...diferenciales.slice().reverse(), ...area];
+  else orden = [...habitaciones.slice(0, 1), ...area, ...diferenciales];
+  return Array.from(new Set(orden)).slice(0, 3);
+}
+
+// ------------------------------------------------------------------
+// Diseño
+// ------------------------------------------------------------------
+
+function Foto({ foto, ancho, alto }: { foto: FotoCargada | null; ancho: number; alto: number }) {
+  if (!foto) {
+    return (
+      <div
+        style={{
+          width: ancho,
+          height: alto,
+          display: "flex",
+          background: `linear-gradient(135deg, ${COLOR_PRIMARIO} 0%, ${COLOR_OSCURO} 100%)`,
+        }}
+      />
+    );
+  }
+  const ratioFoto = foto.w / foto.h;
+  const ratioCaja = ancho / alto;
+  // Si la foto tiene una proporción muy distinta a la del espacio (p. ej. una
+  // foto vertical de WhatsApp en un espacio horizontal), se muestra completa
+  // sobre una versión ampliada y oscurecida de sí misma, en vez de recortarla.
+  const encaja = Math.abs(Math.log(ratioFoto / ratioCaja)) < 0.35;
+  if (encaja) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={foto.src} width={ancho} height={alto} style={{ width: ancho, height: alto, objectFit: "cover" }} />;
+  }
+  const escala = Math.min(ancho / foto.w, alto / foto.h);
+  const w = Math.round(foto.w * escala);
+  const h = Math.round(foto.h * escala);
+  return (
+    <div style={{ width: ancho, height: alto, display: "flex", position: "relative", overflow: "hidden", background: COLOR_OSCURO }}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={foto.src}
+        width={ancho}
+        height={alto}
+        style={{ position: "absolute", top: 0, left: 0, width: ancho, height: alto, objectFit: "cover", opacity: 0.35 }}
+      />
+      <div style={{ position: "absolute", top: 0, left: 0, width: ancho, height: alto, display: "flex", background: "rgba(15,23,42,0.55)" }} />
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={foto.src}
+        width={w}
+        height={h}
+        style={{ position: "absolute", top: Math.round((alto - h) / 2), left: Math.round((ancho - w) / 2), width: w, height: h }}
+      />
+    </div>
+  );
+}
+
+type Fuente = Awaited<ReturnType<typeof fuentes>>[number];
+
+function render(pieza: PiezaImagen, p: ProyectoImagen, foto: FotoCargada | null, fuentesCargadas: Fuente[]) {
+  const conFuentes = fuentesCargadas.length > 0;
   const { width, height } = dimensionesPieza(pieza.formato);
-  const vertical = height > width;
-  const ubicacion = [p.zona, p.ciudad].filter(Boolean).join(" · ");
-  const contacto = p.whatsapp
-    ? `WhatsApp +${p.whatsapp.replace(/\D/g, "")}`
-    : p.urlLanding
-      ? p.urlLanding.replace(/^https?:\/\//, "")
-      : "";
+  const vertical = height === 1920; // reels e historias (9:16); el feed es 4:5
+  // Historias y reels: Instagram tapa ~250 px arriba y abajo con su interfaz.
+  const margenSuperior = vertical ? 200 : 0;
+  const altoFoto = vertical ? 1000 : 780;
+  const padX = 72;
+  const ubicacion = [p.zona, p.ciudad].filter(Boolean).join(", ");
+  const titular = recortar(pieza.titular.trim(), 60);
+  const tamTitular = titular.length <= 24 ? 78 : titular.length <= 36 ? 66 : titular.length <= 48 ? 56 : 48;
+  const beneficios = beneficiosPieza(pieza.tema, p);
+  const precio = p.precioDesde != null ? formatoMoneda(p.precioDesde, p.moneda) : null;
+  const contacto = p.whatsapp ? telefonoLegible(p.whatsapp) : p.urlLanding ? p.urlLanding.replace(/^https?:\/\//, "") : "";
+  const familia = conFuentes ? "Montserrat" : "sans-serif";
 
   return new ImageResponse(
     (
-      <div
-        style={{
-          width: "100%",
-          height: "100%",
-          display: "flex",
-          position: "relative",
-          fontFamily: "sans-serif",
-          color: "white",
-          background: `linear-gradient(135deg, ${COLOR_PRIMARIO} 0%, ${COLOR_OSCURO} 100%)`,
-        }}
-      >
-        {fondo && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={fondo}
-            width={width}
-            height={height}
-            style={{ position: "absolute", top: 0, left: 0, width, height, objectFit: "cover" }}
-          />
+      <div style={{ width, height, display: "flex", flexDirection: "column", background: "#ffffff", fontFamily: familia }}>
+        {vertical && (
+          <div
+            style={{
+              height: margenSuperior,
+              display: "flex",
+              alignItems: "flex-end",
+              padding: `0 ${padX}px 36px`,
+              background: COLOR_OSCURO,
+              color: "#ffffff",
+              fontSize: 34,
+              fontWeight: 700,
+              letterSpacing: 4,
+            }}
+          >
+            {p.nombre.toUpperCase()}
+          </div>
         )}
+        <Foto foto={foto} ancho={width} alto={altoFoto} />
         <div
           style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            width,
-            height,
-            display: "flex",
-            background: conFoto
-              ? "linear-gradient(180deg, rgba(15,23,42,0.15) 0%, rgba(15,23,42,0.35) 45%, rgba(15,23,42,0.92) 100%)"
-              : "transparent",
-          }}
-        />
-        <div
-          style={{
-            position: "relative",
+            flex: 1,
             display: "flex",
             flexDirection: "column",
             justifyContent: "space-between",
-            width: "100%",
-            height: "100%",
-            padding: vertical ? "120px 80px 160px" : "70px 80px",
+            padding: vertical ? `56px ${padX}px 240px` : `44px ${padX}px 48px`,
+            background: "#ffffff",
+            color: COLOR_OSCURO,
           }}
         >
-          <div style={{ display: "flex" }}>
-            <div
-              style={{
-                display: "flex",
-                background: "rgba(255,255,255,0.18)",
-                borderRadius: 999,
-                padding: "12px 28px",
-                fontSize: 30,
-                letterSpacing: 1,
-              }}
-            >
-              {`${p.tipoInmueble} · ${ubicacion}`}
-            </div>
-          </div>
-
           <div style={{ display: "flex", flexDirection: "column" }}>
-            <div style={{ fontSize: 34, opacity: 0.85, marginBottom: 12 }}>{p.nombre}</div>
-            <div
-              style={{
-                fontSize: vertical ? 92 : 78,
-                fontWeight: 700,
-                lineHeight: 1.08,
-                display: "flex",
-              }}
-            >
-              {pieza.titular}
+            <div style={{ display: "flex", fontSize: 26, fontWeight: 700, letterSpacing: 3, color: COLOR_PRIMARIO }}>
+              {(vertical ? ubicacion : `${p.nombre} · ${ubicacion}`).toUpperCase()}
             </div>
-            {p.precioDesde != null && !pieza.titular.includes(formatoMoneda(p.precioDesde, p.moneda)) && (
-              <div style={{ display: "flex", alignItems: "baseline", marginTop: 28 }}>
-                <span style={{ fontSize: 36, opacity: 0.85, marginRight: 14 }}>Desde</span>
-                <span style={{ fontSize: 64, fontWeight: 700, color: COLOR_ACENTO }}>
-                  {formatoMoneda(p.precioDesde, p.moneda)}
-                </span>
+            <div style={{ display: "flex", fontSize: tamTitular, fontWeight: 800, lineHeight: 1.08, marginTop: 14 }}>
+              {titular}
+            </div>
+            {beneficios.length > 0 && (
+              <div style={{ display: "flex", flexWrap: "wrap", marginTop: 24 }}>
+                {beneficios.map((b) => (
+                  <div
+                    key={b}
+                    style={{
+                      display: "flex",
+                      fontSize: 26,
+                      fontWeight: 500,
+                      padding: "10px 22px",
+                      marginRight: 14,
+                      marginBottom: 12,
+                      borderRadius: 999,
+                      background: "#eef2ff",
+                      color: COLOR_PRIMARIO,
+                    }}
+                  >
+                    {b}
+                  </div>
+                ))}
               </div>
             )}
           </div>
 
-          <div style={{ display: "flex", flexDirection: "column" }}>
-            <div
-              style={{
-                display: "flex",
-                alignSelf: "flex-start",
-                background: COLOR_ACENTO,
-                color: COLOR_OSCURO,
-                borderRadius: 16,
-                padding: "20px 36px",
-                fontSize: 40,
-                fontWeight: 700,
-              }}
-            >
-              {pieza.cta}
-            </div>
-            {contacto && (
-              <div style={{ fontSize: 32, marginTop: 22, opacity: 0.9, display: "flex" }}>{contacto}</div>
+          <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between" }}>
+            {precio ? (
+              <div style={{ display: "flex", flexDirection: "column" }}>
+                <div style={{ display: "flex", fontSize: 26, fontWeight: 500, color: "#64748b" }}>Desde</div>
+                <div style={{ display: "flex", fontSize: 58, fontWeight: 800, color: COLOR_OSCURO, lineHeight: 1 }}>{precio}</div>
+              </div>
+            ) : (
+              <div style={{ display: "flex" }} />
             )}
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
+              <div
+                style={{
+                  display: "flex",
+                  background: COLOR_ACENTO,
+                  color: COLOR_OSCURO,
+                  borderRadius: 999,
+                  padding: "18px 34px",
+                  fontSize: 28,
+                  fontWeight: 800,
+                }}
+              >
+                {recortar(pieza.cta, 30)}
+              </div>
+              {contacto && (
+                <div style={{ display: "flex", fontSize: 26, fontWeight: 700, marginTop: 12, color: "#334155" }}>
+                  {p.whatsapp ? `WhatsApp ${contacto}` : contacto}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
     ),
-    { width, height }
+    { width, height, ...(conFuentes ? { fonts: fuentesCargadas } : {}) }
   );
 }
 
-/** Devuelve el PNG de la pieza. Si el render de fondo no carga, usa el fondo de marca. */
+/** Devuelve el PNG de la pieza. Si la foto no carga, usa un fondo de marca. */
 export async function generarImagenPieza(pieza: PiezaImagen, proyecto: ProyectoImagen): Promise<Buffer> {
-  const fondo = fondoPieza(pieza, proyecto);
-  if (fondo) {
-    try {
-      return Buffer.from(await render(pieza, proyecto, fondo).arrayBuffer());
-    } catch (error) {
-      console.warn("[mercadeo] No se pudo usar la imagen de fondo, se usa fondo de marca:", error);
-    }
+  const url = fondoPieza(pieza, proyecto);
+  const [foto, fuentesCargadas] = await Promise.all([url ? cargarFoto(url) : null, fuentes()]);
+  try {
+    return Buffer.from(await render(pieza, proyecto, foto, fuentesCargadas).arrayBuffer());
+  } catch (error) {
+    // Una imagen corrupta no debe impedir publicar: se usa el fondo de marca.
+    console.warn("[mercadeo] Error dibujando la pieza con foto, se usa fondo de marca:", error);
+    return Buffer.from(await render(pieza, proyecto, null, fuentesCargadas).arrayBuffer());
   }
-  return Buffer.from(await render(pieza, proyecto, null).arrayBuffer());
 }

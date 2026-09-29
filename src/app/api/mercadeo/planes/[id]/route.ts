@@ -29,6 +29,7 @@ const edicionSchema = z.object({
   hashtags: z.string().trim().max(500).optional(),
   pagada: z.boolean().optional(),
   presupuesto: z.number().nonnegative().optional(),
+  imagenFondo: z.string().max(1000).optional(), // "" = sin foto
 });
 
 // PATCH /api/mercadeo/planes/[id] -> editar el contenido de una pieza antes de enviarlo
@@ -43,6 +44,13 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     return NextResponse.json({ error: "Solo se pueden editar planes en borrador o rechazados." }, { status: 409 });
   }
   const { piezaId, ...cambios } = parsed.data;
+  if (cambios.imagenFondo) {
+    const proyecto = await prisma.proyectoVenta.findUnique({ where: { id: plan.proyectoVentaId }, select: { imagenes: true, imagenUrl: true } });
+    const permitidas = [...(proyecto?.imagenes ?? []), ...(proyecto?.imagenUrl ? [proyecto.imagenUrl] : [])];
+    if (!permitidas.includes(cambios.imagenFondo)) {
+      return NextResponse.json({ error: "La imagen debe ser una de la galería del proyecto." }, { status: 400 });
+    }
+  }
   if (cambios.pagada === false) cambios.presupuesto = 0;
   const r = await prisma.piezaPlan.updateMany({ where: { id: piezaId, planId: plan.id }, data: cambios });
   if (r.count === 0) return NextResponse.json({ error: "Pieza no encontrada" }, { status: 404 });

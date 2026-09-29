@@ -471,6 +471,7 @@ model PiezaPlan {
   conceptoVisual  String // descripción de la imagen/escena (sirve de prompt para diseño)
   guionVideo      String? // guion por escenas para VIDEO/REEL/HISTORIA
   videoUrl        String? // video de la galería del proyecto asignado a esta pieza (reel/video/historia)
+  imagenFondo     String? // foto de la galería usada en la pieza ("" = sin foto); null = rotación automática
 
   // Publicación en Meta
   estadoMeta  String? // PENDIENTE | PROGRAMADA | PUBLICADA | PAUTA_CREADA | ERROR

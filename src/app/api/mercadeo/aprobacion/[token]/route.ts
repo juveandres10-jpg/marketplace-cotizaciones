@@ -10,6 +10,16 @@ const schema = z.object({
   decision: z.enum(["aprobar", "rechazar", "corregir"]),
   nombre: z.string().trim().min(2).max(200),
   comentario: z.string().trim().max(4000).optional(),
+  porPieza: z
+    .array(
+      z.object({
+        orden: z.number().int().positive(),
+        nota: z.string().trim().max(1000).optional(),
+        imagenFondo: z.string().max(1000).optional(),
+      })
+    )
+    .max(30)
+    .optional(),
 });
 
 // POST /api/mercadeo/aprobacion/[token] -> aprobar o rechazar (el token del correo es la credencial).
@@ -18,7 +28,8 @@ const schema = z.object({
 export async function POST(req: Request, { params }: { params: { token: string } }) {
   const parsed = schema.safeParse(await req.json().catch(() => ({})));
   if (!parsed.success) return datosInvalidos(parsed.error);
-  if (parsed.data.decision !== "aprobar" && !parsed.data.comentario) {
+  const hayPorPieza = (parsed.data.porPieza ?? []).some((x) => x.nota || x.imagenFondo !== undefined);
+  if (parsed.data.decision !== "aprobar" && !parsed.data.comentario && !hayPorPieza) {
     return NextResponse.json({ error: "Escribe qué hay que corregir para poder ajustar el plan." }, { status: 400 });
   }
   try {

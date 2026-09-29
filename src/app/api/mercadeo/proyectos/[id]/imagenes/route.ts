@@ -5,6 +5,7 @@ import { del } from "@vercel/blob";
 import { prisma } from "@/lib/prisma";
 import { autorizarMercadeo } from "@/lib/mercadeo/auth";
 import { datosInvalidos, noAutorizado } from "@/lib/mercadeo/http";
+import { tokenBlob, variablesBlobPresentes } from "@/lib/blob-token";
 
 export const dynamic = "force-dynamic";
 
@@ -13,10 +14,15 @@ const TAMANO_MAX_BYTES = 20 * 1024 * 1024; // 20 MB (renders en alta)
 const TIPOS = ["image/jpeg", "image/png", "image/webp"];
 
 function sinBlob() {
+  const presentes = variablesBlobPresentes();
   return NextResponse.json(
     {
       error:
-        "El almacenamiento de imágenes no está configurado (falta BLOB_READ_WRITE_TOKEN). En Vercel: Storage → Create → Blob → conectar al proyecto.",
+        "El almacenamiento de imágenes no está configurado (no hay un token de Vercel Blob válido en esta publicación). " +
+        "En Vercel: Storage → Blob → conectar al proyecto (Production) y luego Redeploy. " +
+        (presentes.length
+          ? `Variables encontradas: ${presentes.join(", ")} (ninguna con un token vercel_blob_rw_ válido).`
+          : "No se encontró ninguna variable de Blob."),
     },
     { status: 500 }
   );
@@ -36,7 +42,8 @@ function esUrlDeBlob(url: string) {
 // directo a Blob (sin pasar por la función, que tiene límite de 4.5 MB) con un
 // token de corta duración que se emite aquí solo para proyectos de la empresa.
 export async function POST(req: Request, { params }: { params: { id: string } }) {
-  if (!process.env.BLOB_READ_WRITE_TOKEN) return sinBlob();
+  const token = tokenBlob();
+  if (!token) return sinBlob();
   const body = (await req.json().catch(() => null)) as HandleUploadBody | null;
   if (!body?.type) return NextResponse.json({ error: "Solicitud inválida" }, { status: 400 });
 
@@ -57,6 +64,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
   try {
     const r = await handleUpload({
+      token,
       body,
       request: req,
       onBeforeGenerateToken: async (pathname) => {
@@ -103,8 +111,9 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   }
   if (quitar && imagenes.includes(quitar)) {
     imagenes = imagenes.filter((u) => u !== quitar);
-    if (process.env.BLOB_READ_WRITE_TOKEN && esUrlDeBlob(quitar)) {
-      await del(quitar).catch((e) => console.warn("[mercadeo] no se pudo borrar del Blob:", e));
+    const token = tokenBlob();
+    if (token && esUrlDeBlob(quitar)) {
+      await del(quitar, { token }).catch((e) => console.warn("[mercadeo] no se pudo borrar del Blob:", e));
     }
   }
   if (principal && imagenes.includes(principal)) {

@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { put } from "@vercel/blob";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { tokenBlob } from "@/lib/blob-token";
 
 const TAMANO_MAX_BYTES = 15 * 1024 * 1024; // 15 MB
 
@@ -17,7 +18,8 @@ export async function POST(
   }
   const user = session.user as any;
 
-  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+  const token = tokenBlob();
+  if (!token) {
     return NextResponse.json(
       {
         error:
@@ -53,7 +55,7 @@ export async function POST(
   const blob = await put(
     `cotizaciones/${params.id}/${Date.now()}-${file.name}`,
     file,
-    { access: "public" }
+    { access: "public", token }
   );
 
   const archivo = await prisma.archivoCotizacion.create({

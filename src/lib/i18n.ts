@@ -15,7 +15,6 @@ export const dictionaries = {
       proyectos: "Proyectos",
       catalogo: "Catálogo",
       sondeo: "Sondeo",
-      mercadeo: "Mercadeo",
       salir: "Salir",
     },
     landing: {
@@ -104,7 +103,6 @@ export const dictionaries = {
       proyectos: "Projects",
       catalogo: "Catalog",
       sondeo: "Sourcing",
-      mercadeo: "Marketing",
       salir: "Sign out",
     },
     landing: {

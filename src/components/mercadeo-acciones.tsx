@@ -423,6 +423,11 @@ export function CorreccionesProvider({ children }: { children: React.ReactNode }
   );
 }
 
+/** Nombre escrito por quien aprueba (vacío fuera de la página de aprobación). */
+export function useNombreAprobador() {
+  return useContext(CorreccionesContext)?.nombre ?? "";
+}
+
 /** Corrección de una pieza en la página de aprobación: nota para la IA y/o elegir otra foto. */
 export function NotaPieza({
   token,

@@ -14,6 +14,8 @@ import {
 } from "@/components/mercadeo-plan-vista";
 import { CorregirPlanForm, EditorPieza, EnviarAprobacionForm, PlanAccionesSecundarias } from "@/components/mercadeo-acciones";
 import { correccionAutomaticaDisponible } from "@/lib/mercadeo/correcciones";
+import { AnalisisCreativoPieza, AnalizarTodasBoton } from "@/components/mercadeo-creativo";
+import type { AnalisisCreativo } from "@/lib/mercadeo/creativo";
 import type { Analisis } from "@/lib/mercadeo/analisis";
 import { formatoFecha, formatoFechaHora } from "@/lib/mercadeo/fechas";
 
@@ -39,6 +41,8 @@ export default async function PlanPage({ params }: { params: { id: string } }) {
     instrucciones: string;
     resumen: string;
   }>;
+  const iaDisponible = correccionAutomaticaDisponible();
+  const puedeAplicar = editable || plan.estado === "PENDIENTE_APROBACION";
   const resultadoMeta = plan.metaResultado as { fecha: string; resultados: Array<{ orden: number; ok: boolean; detalle: string }> } | null;
 
   return (
@@ -148,7 +152,15 @@ export default async function PlanPage({ params }: { params: { id: string } }) {
           <MarkdownSimple texto={plan.estrategia} />
         </div>
 
-        <h2 className="font-semibold text-lg mb-3">Calendario y piezas</h2>
+        <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
+          <h2 className="font-semibold text-lg">Calendario y piezas</h2>
+          <AnalizarTodasBoton
+            disponible={iaDisponible}
+            peticiones={plan.piezas
+              .filter((p) => !p.analisisCreativo)
+              .map((p) => ({ orden: p.orden, url: `/api/mercadeo/piezas/${p.id}/creativo`, cuerpo: {} }))}
+          />
+        </div>
         <div className="grid gap-3">
           {plan.piezas.map((p) => (
             <PiezaTarjeta key={p.id} pieza={p} moneda={plan.moneda}>
@@ -173,6 +185,14 @@ export default async function PlanPage({ params }: { params: { id: string } }) {
                   />
                 )}
               </div>
+              <AnalisisCreativoPieza
+                imagenUrl={`/api/mercadeo/piezas/${p.id}/imagen?v=${p.updatedAt.getTime()}`}
+                analisis={p.analisisCreativo as unknown as AnalisisCreativo | null}
+                endpoint={`/api/mercadeo/piezas/${p.id}/creativo`}
+                cuerpo={{}}
+                disponible={iaDisponible}
+                puedeAplicar={puedeAplicar}
+              />
             </PiezaTarjeta>
           ))}
         </div>

@@ -70,6 +70,19 @@ piezas (imagen + copy + guion de video), lo envía por correo para aprobación y
    - Orgánicas de Instagram → en cola; la API no permite programar, así que la
      tarea automática las publica cuando llega la hora.
 
+## Análisis creativo con IA
+
+Cada pieza (en la página del plan y en el enlace de aprobación) tiene el botón **✦ Análisis creativo con IA**. Claude mira la imagen final, tal como se publicará, y entrega:
+
+- **Puntaje 0-100** de potencial de alcance y un veredicto de una frase.
+- **Diagrama de lectura** sobre la imagen: tercios, punto focal, recorrido del ojo (1→n) y zonas fuertes o por mejorar.
+- **Puntaje por factor** (0-10): detiene el scroll, claridad, composición, legibilidad en celular, emoción, relevancia local, llamado a la acción y coherencia de marca.
+- **Contexto y análisis a profundidad**, apoyado en las métricas de la cuenta.
+- **3 propuestas originales** (titular, texto, CTA y concepto visual). Cada una indica con qué herramienta creativa producirla (Canva, Firefly, Photoshop, Ideogram, Midjourney, Magnific, CapCut, Runway, Kling, Luma, Advantage+) e incluye un prompt listo para copiar. **Aplicar esta propuesta** reemplaza los textos de la pieza y deja registro en el historial.
+- **Tácticas** para ampliar el alcance orgánico.
+
+"✦ Análisis creativo IA de las N piezas" analiza las pendientes una por una. Requiere `ANTHROPIC_API_KEY` y cada análisis es una llamada a Claude con la imagen.
+
 ## Pago de la pauta
 
 La app no maneja tarjetas ni pagos: Meta cobra la pauta al método de pago

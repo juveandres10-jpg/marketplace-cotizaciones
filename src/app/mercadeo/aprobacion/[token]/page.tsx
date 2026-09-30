@@ -3,6 +3,8 @@ import { AprobacionForm, CorreccionesProvider, NotaPieza } from "@/components/me
 import { planPorToken } from "@/lib/mercadeo/servicio";
 import { estadoConfiguracionMeta } from "@/lib/mercadeo/meta";
 import { correccionAutomaticaDisponible } from "@/lib/mercadeo/correcciones";
+import { AnalisisCreativoPieza, AnalizarTodasBoton } from "@/components/mercadeo-creativo";
+import type { AnalisisCreativo } from "@/lib/mercadeo/creativo";
 import type { Analisis } from "@/lib/mercadeo/analisis";
 import { formatoFecha } from "@/lib/mercadeo/fechas";
 
@@ -75,11 +77,31 @@ export default async function AprobacionPage({ params }: { params: { token: stri
         <div className="border rounded-xl bg-white p-5 mb-8">
           <MarkdownSimple texto={plan.estrategia} />
         </div>
-        <h2 className="font-semibold text-lg mb-3">Calendario y piezas</h2>
+        <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
+          <h2 className="font-semibold text-lg">Calendario y piezas</h2>
+          {pendiente && (
+            <AnalizarTodasBoton
+              disponible={correccionAutomaticaDisponible()}
+              peticiones={plan.piezas
+                .filter((p) => !p.analisisCreativo)
+                .map((p) => ({ orden: p.orden, url: `/api/mercadeo/aprobacion/${params.token}/creativo`, cuerpo: { orden: p.orden } }))}
+            />
+          )}
+        </div>
         <div className="grid gap-3">
           {plan.piezas.map((p) => (
             <PiezaTarjeta key={p.id} pieza={p} moneda={plan.moneda}>
               {pendiente && <NotaPieza token={params.token} orden={p.orden} galeria={galeria} fotoActual={fotoDe(p)} />}
+              {(pendiente || p.analisisCreativo) && (
+                <AnalisisCreativoPieza
+                  imagenUrl={`/api/mercadeo/piezas/${p.id}/imagen?v=${p.updatedAt.getTime()}`}
+                  analisis={p.analisisCreativo as unknown as AnalisisCreativo | null}
+                  endpoint={`/api/mercadeo/aprobacion/${params.token}/creativo`}
+                  cuerpo={{ orden: p.orden }}
+                  disponible={pendiente && correccionAutomaticaDisponible()}
+                  puedeAplicar={pendiente}
+                />
+              )}
             </PiezaTarjeta>
           ))}
         </div>

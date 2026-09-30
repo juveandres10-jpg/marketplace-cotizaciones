@@ -135,14 +135,7 @@ export async function corregirPiezaPorToken(params: {
   nota?: string;
   imagenFondo?: string;
 }): Promise<{ mensaje: string }> {
-  const plan = await planPorToken(params.token);
-  if (!plan) throw new ErrorMercadeo("Enlace inválido o ya utilizado.", 404);
-  if (plan.estado !== "PENDIENTE_APROBACION") {
-    throw new ErrorMercadeo(`Este plan ya fue ${plan.estado.toLowerCase().replace("_", " ")}.`, 409);
-  }
-  if (plan.tokenExpira && plan.tokenExpira < new Date()) {
-    throw new ErrorMercadeo("El enlace venció. Pide que se reenvíe el plan.", 410);
-  }
+  const plan = await planPendientePorToken(params.token);
   const pieza = plan.piezas.find((p) => p.orden === params.orden);
   if (!pieza) throw new ErrorMercadeo("Pieza no encontrada", 404);
 
@@ -171,4 +164,17 @@ export async function corregirPiezaPorToken(params: {
 
   if (partes.length === 0) throw new ErrorMercadeo("Escribe la corrección o elige otra foto para esta pieza.", 400);
   return { mensaje: partes.join(" ") };
+}
+
+/** Plan de un enlace de aprobación que todavía se puede revisar (no decidido ni vencido). */
+export async function planPendientePorToken(token: string) {
+  const plan = await planPorToken(token);
+  if (!plan) throw new ErrorMercadeo("Enlace inválido o ya utilizado.", 404);
+  if (plan.estado !== "PENDIENTE_APROBACION") {
+    throw new ErrorMercadeo(`Este plan ya fue ${plan.estado.toLowerCase().replace("_", " ")}.`, 409);
+  }
+  if (plan.tokenExpira && plan.tokenExpira < new Date()) {
+    throw new ErrorMercadeo("El enlace venció. Pide que se reenvíe el plan.", 410);
+  }
+  return plan;
 }

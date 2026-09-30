@@ -461,26 +461,27 @@ model PlanSemanal {
 
 // Una publicación/pauta dentro del plan.
 model PiezaPlan {
-  id              String           @id @default(cuid())
-  planId          String
-  plan            PlanSemanal      @relation(fields: [planId], references: [id], onDelete: Cascade)
-  orden           Int
-  fechaProgramada DateTime
-  plataforma      PlataformaSocial
-  formato         FormatoPieza
-  objetivo        ObjetivoPauta    @default(LEADS)
-  tema            String
-  pagada          Boolean          @default(false)
-  presupuesto     Float            @default(0)
-  diasPauta       Int              @default(0)
-  titular         String
-  copy            String
-  cta             String
-  hashtags        String?
-  conceptoVisual  String // descripción de la imagen/escena (sirve de prompt para diseño)
-  guionVideo      String? // guion por escenas para VIDEO/REEL/HISTORIA
-  videoUrl        String? // video de la galería del proyecto asignado a esta pieza (reel/video/historia)
-  imagenFondo     String? // foto de la galería usada en la pieza ("" = sin foto); null = rotación automática
+  id               String           @id @default(cuid())
+  planId           String
+  plan             PlanSemanal      @relation(fields: [planId], references: [id], onDelete: Cascade)
+  orden            Int
+  fechaProgramada  DateTime
+  plataforma       PlataformaSocial
+  formato          FormatoPieza
+  objetivo         ObjetivoPauta    @default(LEADS)
+  tema             String
+  pagada           Boolean          @default(false)
+  presupuesto      Float            @default(0)
+  diasPauta        Int              @default(0)
+  titular          String
+  copy             String
+  cta              String
+  hashtags         String?
+  conceptoVisual   String // descripción de la imagen/escena (sirve de prompt para diseño)
+  guionVideo       String? // guion por escenas para VIDEO/REEL/HISTORIA
+  videoUrl         String? // video de la galería del proyecto asignado a esta pieza (reel/video/historia)
+  imagenFondo      String? // foto de la galería usada en la pieza ("" = sin foto); null = rotación automática
+  analisisCreativo Json? // diagnóstico creativo con IA: puntajes, diagrama de lectura y propuestas (ver creativo.ts)
 
   // Publicación en Meta
   estadoMeta  String? // PENDIENTE | PROGRAMADA | PUBLICADA | PAUTA_CREADA | ERROR

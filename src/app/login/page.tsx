@@ -5,6 +5,7 @@ import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useLocale } from "@/components/providers";
+import { TemaToggle } from "@/components/tema";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -36,6 +37,7 @@ export default function LoginPage() {
 
   return (
     <main className="min-h-screen flex items-center justify-center px-6">
+      <TemaToggle className="fixed top-4 right-4 bg-white" />
       <form
         onSubmit={handleSubmit}
         className="w-full max-w-sm bg-white p-8 rounded-xl shadow-sm border"

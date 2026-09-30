@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { signOut, useSession } from "next-auth/react";
 import { useLocale } from "@/components/providers";
+import { TemaToggle } from "@/components/tema";
 
 export function NavBar() {
   const { data: session } = useSession();
@@ -27,6 +28,7 @@ export function NavBar() {
           </Link>
         </div>
         <div className="flex items-center gap-3 text-sm">
+          <TemaToggle />
           <div className="flex border rounded-lg overflow-hidden text-xs">
             <button
               onClick={() => setLocale("es")}

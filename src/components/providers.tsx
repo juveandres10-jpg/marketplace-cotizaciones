@@ -3,6 +3,7 @@
 import { createContext, useContext, useState } from "react";
 import { SessionProvider } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import { TemaSync } from "@/components/tema";
 import {
   Dictionary,
   Locale,
@@ -42,7 +43,10 @@ export function Providers({
 
   return (
     <LocaleContext.Provider value={{ locale, t: getDictionary(locale), setLocale }}>
-      <SessionProvider>{children}</SessionProvider>
+      <SessionProvider>
+        <TemaSync />
+        {children}
+      </SessionProvider>
     </LocaleContext.Provider>
   );
 }
